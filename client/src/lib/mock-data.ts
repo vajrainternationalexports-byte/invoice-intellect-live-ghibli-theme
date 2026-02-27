@@ -81,7 +81,16 @@ export const mockData = {
       riskScore: "Low",
       totalSpent: 125000,
       duplicateWarning: false,
-      contact: "billing@acme.com"
+      contact: "billing@acme.com",
+      owner: "Robert J. Wilson",
+      totalOrders: 42,
+      lastOrderDate: "Oct 24, 2023",
+      bankDetails: {
+        accountName: "Acme Corp Ltd",
+        accountNumber: "**** 8892",
+        routingNumber: "121000358",
+        bankName: "Chase Bank"
+      }
     },
     {
       id: "V-002",
@@ -90,7 +99,16 @@ export const mockData = {
       totalSpent: 4500,
       duplicateWarning: true,
       duplicateOf: "V-001",
-      contact: "finance.acme@gmail.com"
+      contact: "finance.acme@gmail.com",
+      owner: "Unknown",
+      totalOrders: 2,
+      lastOrderDate: "Oct 15, 2023",
+      bankDetails: {
+        accountName: "Acme Corp",
+        accountNumber: "**** 8892",
+        routingNumber: "121000358",
+        bankName: "Wells Fargo"
+      }
     },
     {
       id: "V-003",
@@ -98,7 +116,16 @@ export const mockData = {
       riskScore: "Low",
       totalSpent: 89000,
       duplicateWarning: false,
-      contact: "accounts@techflow.io"
+      contact: "accounts@techflow.io",
+      owner: "Elena Rodriguez",
+      totalOrders: 156,
+      lastOrderDate: "Oct 22, 2023",
+      bankDetails: {
+        accountName: "TechFlow Systems LLC",
+        accountNumber: "**** 4431",
+        routingNumber: "021000021",
+        bankName: "Citibank"
+      }
     }
   ]
 };
