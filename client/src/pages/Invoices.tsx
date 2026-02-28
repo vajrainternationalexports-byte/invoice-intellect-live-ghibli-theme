@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { mockData } from "@/lib/mock-data";
-import { Camera, FileUp, Search, CheckCircle2, AlertTriangle, Clock, Check, CreditCard } from "lucide-react";
+import { Camera, FileUp, Search, CheckCircle2, AlertTriangle, Clock, Check, CreditCard, Calendar as CalendarIcon, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 export default function Invoices() {
   const [activeTab, setActiveTab] = useState("all");
   const [invoices, setInvoices] = useState(mockData.invoices);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   const getStatusIcon = (status: string) => {
     switch(status) {
@@ -30,6 +34,14 @@ export default function Invoices() {
       inv.id === id ? { ...inv, status: 'processed' } : inv
     ));
     toast.success("Payment initiated successfully");
+  };
+
+  const handleSchedulePayment = (id: string, date: Date) => {
+    const formattedDate = format(date, "dd/MM/yyyy");
+    setInvoices(prev => prev.map(inv => 
+      inv.id === id ? { ...inv, status: 'processed', processedDate: formattedDate } : inv
+    ));
+    toast.success(`Payment scheduled for ${formattedDate}`);
   };
 
   return (
@@ -91,7 +103,7 @@ export default function Invoices() {
                 <div className="flex items-center gap-1 justify-end mt-1">
                   {getStatusIcon(inv.status)}
                   <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-500">
-                    {inv.status.replace('_', ' ')}
+                    {inv.status === 'processed' && inv.processedDate ? `Paid ${inv.processedDate}` : inv.status.replace('_', ' ')}
                   </span>
                 </div>
               </div>
@@ -111,22 +123,49 @@ export default function Invoices() {
               )} />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
               {inv.status === 'needs_review' && (
                 <button 
                   onClick={() => handleApprove(inv.id)}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm shadow-emerald-200"
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm shadow-emerald-200"
                 >
                   <Check size={16} /> Approve
                 </button>
               )}
               {inv.status === 'pending' && (
-                <button 
-                  onClick={() => handlePay(inv.id)}
-                  className="flex-1 bg-primary hover:bg-primary/90 text-white py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm shadow-blue-200"
-                >
-                  <CreditCard size={16} /> Pay Now
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handlePay(inv.id)}
+                    className="flex-1 bg-primary hover:bg-primary/90 text-white py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm shadow-blue-200"
+                  >
+                    <CreditCard size={16} /> Pay Now
+                  </button>
+                  
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button 
+                        className="flex-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
+                      >
+                        <CalendarIcon size={16} /> Pay on Due Date
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 rounded-3xl overflow-hidden shadow-2xl border-0" align="end">
+                      <div className="p-4 bg-white">
+                        <Calendar
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={(date) => {
+                            if (date) {
+                              handleSchedulePayment(inv.id, date);
+                            }
+                          }}
+                          initialFocus
+                          className="rounded-2xl"
+                        />
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
               )}
             </div>
           </div>
