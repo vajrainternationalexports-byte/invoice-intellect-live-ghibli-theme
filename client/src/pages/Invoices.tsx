@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { mockData } from "@/lib/mock-data";
-import { Camera, FileUp, Search, CheckCircle2, AlertTriangle, Clock, Check, CreditCard, Calendar as CalendarIcon, X, ChevronRight, Receipt } from "lucide-react";
+import { Camera, FileUp, Search, CheckCircle2, AlertTriangle, Clock, Check, CreditCard, Calendar as CalendarIcon, X, ChevronRight, Receipt, Loader2, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -9,12 +9,25 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
+import { Label } from "@/components/ui/label";
 
 export default function Invoices() {
   const [activeTab, setActiveTab] = useState("all");
   const [invoices, setInvoices] = useState(mockData.invoices);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedInvoice, setSelectedInvoice] = useState<typeof mockData.invoices[0] | null>(null);
+  
+  // OCR Scan State
+  const [isScanning, setIsScanning] = useState(false);
+  const [showScanDrawer, setShowScanDrawer] = useState(false);
+  const [scannedData, setScannedData] = useState({
+    vendor: "",
+    amount: "",
+    id: "",
+    date: format(new Date(), "MMM dd, yyyy")
+  });
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getStatusIcon = (status: string, size = 14) => {
     switch(status) {
@@ -46,19 +59,71 @@ export default function Invoices() {
     toast.success(`Scheduled for ${formattedDate}`);
   };
 
+  const handleScan = () => {
+    setIsScanning(true);
+    setShowScanDrawer(true);
+    
+    // Simulate OCR processing
+    setTimeout(() => {
+      setScannedData({
+        vendor: "Handwritten Supplies Co.",
+        amount: "450.00",
+        id: "HW-" + Math.floor(Math.random() * 1000),
+        date: format(new Date(), "MMM dd, yyyy")
+      });
+      setIsScanning(false);
+      toast.info("OCR Complete: Handwritten text identified");
+    }, 2500);
+  };
+
+  const saveScannedInvoice = () => {
+    if (!scannedData.vendor || !scannedData.amount) {
+      toast.error("Please fill in required details");
+      return;
+    }
+
+    const newInvoice = {
+      id: scannedData.id || "INV-" + Math.floor(Math.random() * 1000),
+      vendor: scannedData.vendor,
+      amount: parseFloat(scannedData.amount),
+      date: scannedData.date,
+      dueDate: format(new Date(), "MMM dd, yyyy"),
+      status: "needs_review",
+      confidence: 82,
+      items: [{ desc: "Manual Entry/Scan", qty: 1, price: parseFloat(scannedData.amount) }]
+    };
+
+    setInvoices([newInvoice, ...invoices]);
+    setShowScanDrawer(false);
+    toast.success("Invoice added to review");
+  };
+
   return (
     <div className="p-3 space-y-4 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
       <header className="space-y-3">
         <h1 className="text-xl font-bold tracking-tight text-gray-900">Invoices</h1>
         
         <div className="grid grid-cols-2 gap-2">
-          <button className="bg-white border border-gray-100 shadow-sm p-2 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95">
+          <button 
+            onClick={handleScan}
+            className="bg-white border border-gray-100 shadow-sm p-2 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+          >
             <Camera size={16} className="text-primary" />
             <span className="text-xs font-semibold text-gray-700">Scan</span>
           </button>
-          <button className="bg-white border border-gray-100 shadow-sm p-2 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95">
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-white border border-gray-100 shadow-sm p-2 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+          >
             <FileUp size={16} className="text-primary" />
             <span className="text-xs font-semibold text-gray-700">Upload</span>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              onChange={handleScan}
+              accept="image/*,application/pdf" 
+            />
           </button>
         </div>
 
@@ -162,6 +227,7 @@ export default function Invoices() {
         ))}
       </div>
 
+      {/* Invoice Detail Drawer */}
       <Drawer open={!!selectedInvoice} onOpenChange={(open) => !open && setSelectedInvoice(null)}>
         <DrawerContent className="max-h-[85dvh] bg-gray-50 rounded-t-[2rem]">
           {selectedInvoice && (
@@ -210,14 +276,6 @@ export default function Invoices() {
                 </div>
               </div>
 
-              <div className="bg-blue-50/50 p-4 rounded-2xl space-y-2">
-                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Payment Intelligence</p>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-blue-900 font-medium">Due Date</span>
-                  <span className="text-xs font-bold text-blue-900">{selectedInvoice.dueDate}</span>
-                </div>
-              </div>
-
               <div className="pb-safe">
                 <button 
                   className="w-full bg-primary text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
@@ -228,6 +286,97 @@ export default function Invoices() {
               </div>
             </div>
           )}
+        </DrawerContent>
+      </Drawer>
+
+      {/* OCR Scan/Manual Entry Drawer */}
+      <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
+        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+          <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
+            <DrawerHeader className="p-0 text-left">
+              <div className="flex justify-between items-center mb-4">
+                <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                  <Camera size={24} />
+                </div>
+                <DrawerClose className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center">
+                  <X size={16} />
+                </DrawerClose>
+              </div>
+              <DrawerTitle className="text-xl font-bold">
+                {isScanning ? "Scanning Invoice..." : "Verify Invoice Details"}
+              </DrawerTitle>
+              <DrawerDescription className="text-sm text-gray-500">
+                {isScanning ? "Our OCR is extracting data from the handwritten note." : "We've extracted these details. Please verify or add missing information."}
+              </DrawerDescription>
+            </DrawerHeader>
+
+            {isScanning ? (
+              <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                <div className="relative">
+                  <div className="h-24 w-24 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 size={32} className="text-primary animate-pulse" />
+                  </div>
+                </div>
+                <p className="text-sm font-medium text-gray-500 animate-pulse">Analyzing handwriting...</p>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Vendor Name</Label>
+                  <Input 
+                    value={scannedData.vendor} 
+                    onChange={(e) => setScannedData({...scannedData, vendor: e.target.value})}
+                    placeholder="Enter vendor name"
+                    className="h-12 rounded-xl bg-gray-50 border-gray-100 focus:bg-white transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Total Amount</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                      <Input 
+                        value={scannedData.amount} 
+                        onChange={(e) => setScannedData({...scannedData, amount: e.target.value})}
+                        placeholder="0.00"
+                        className="h-12 pl-7 rounded-xl bg-gray-50 border-gray-100 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Invoice Number</Label>
+                    <Input 
+                      value={scannedData.id} 
+                      onChange={(e) => setScannedData({...scannedData, id: e.target.value})}
+                      placeholder="INV-XXXX"
+                      className="h-12 rounded-xl bg-gray-50 border-gray-100 focus:bg-white transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Invoice Date</Label>
+                  <Input 
+                    value={scannedData.date} 
+                    onChange={(e) => setScannedData({...scannedData, date: e.target.value})}
+                    placeholder="Date"
+                    className="h-12 rounded-xl bg-gray-50 border-gray-100 focus:bg-white transition-all"
+                  />
+                </div>
+
+                <div className="pt-4 pb-safe">
+                  <button 
+                    onClick={saveScannedInvoice}
+                    className="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-[0.98] transition-all"
+                  >
+                    <Save size={20} /> Save & Review
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </DrawerContent>
       </Drawer>
     </div>
