@@ -15,7 +15,9 @@ export const mockData = {
   invoices: [
     {
       id: "INV-2023-001",
-      vendor: "Acme Corp Ltd.",
+      irn: "1234567890123456789012345678901234567890123456789012345678901234",
+      vendor: "Acme India Pvt Ltd.",
+      gstin: "27AAAAA0000A1Z5",
       amount: 4500.00,
       date: "Oct 24, 2023",
       dueDate: "Nov 24, 2023",
@@ -28,7 +30,9 @@ export const mockData = {
     },
     {
       id: "INV-2023-002",
-      vendor: "TechFlow Systems",
+      irn: "9876543210987654321098765432109876543210987654321098765432109876",
+      vendor: "TechFlow Systems India",
+      gstin: "29BBBBB1111B1Z2",
       amount: 1250.50,
       date: "Oct 22, 2023",
       dueDate: "Nov 22, 2023",
@@ -41,7 +45,9 @@ export const mockData = {
     },
     {
       id: "INV-2023-003",
-      vendor: "Global Logistics",
+      irn: "4567890123456789012345678901234567890123456789012345678901234567",
+      vendor: "Global Logistics India",
+      gstin: "19CCCCC2222C1Z3",
       amount: 890.00,
       date: "Oct 20, 2023",
       dueDate: "Nov 20, 2023",
@@ -56,7 +62,7 @@ export const mockData = {
     {
       poNumber: "PO-9921",
       invoiceId: "INV-2023-001",
-      vendor: "Acme Corp Ltd.",
+      vendor: "Acme India Pvt Ltd.",
       matchStatus: "matched",
       poAmount: 4500.00,
       invAmount: 4500.00,
@@ -66,7 +72,7 @@ export const mockData = {
     {
       poNumber: "PO-9922",
       invoiceId: "INV-2023-002",
-      vendor: "TechFlow Systems",
+      vendor: "TechFlow Systems India",
       matchStatus: "discrepancy",
       poAmount: 1100.00,
       invAmount: 1250.50,
@@ -77,24 +83,26 @@ export const mockData = {
   vendors: [
     {
       id: "V-001",
-      name: "Acme Corp Ltd.",
+      name: "Acme India Pvt Ltd.",
+      gstin: "27AAAAA0000A1Z5",
       riskScore: "Low",
       totalSpent: 125000,
       duplicateWarning: false,
-      contact: "billing@acme.com",
+      contact: "billing@acme.in",
       owner: "Robert J. Wilson",
       totalOrders: 42,
       lastOrderDate: "Oct 24, 2023",
       bankDetails: {
-        accountName: "Acme Corp Ltd",
+        accountName: "Acme India Pvt Ltd",
         accountNumber: "**** 8892",
-        routingNumber: "121000358",
-        bankName: "Chase Bank"
+        routingNumber: "HDFC0001234",
+        bankName: "HDFC Bank"
       }
     },
     {
       id: "V-002",
-      name: "Acme Corporation",
+      name: "Acme Corporation (India)",
+      gstin: "27AAAAA0000A1Z5",
       riskScore: "High",
       totalSpent: 4500,
       duplicateWarning: true,
@@ -106,25 +114,26 @@ export const mockData = {
       bankDetails: {
         accountName: "Acme Corp",
         accountNumber: "**** 8892",
-        routingNumber: "121000358",
-        bankName: "Wells Fargo"
+        routingNumber: "ICIC0005678",
+        bankName: "ICICI Bank"
       }
     },
     {
       id: "V-003",
-      name: "TechFlow Systems",
+      name: "TechFlow Systems India",
+      gstin: "29BBBBB1111B1Z2",
       riskScore: "Low",
       totalSpent: 89000,
       duplicateWarning: false,
-      contact: "accounts@techflow.io",
+      contact: "accounts@techflow.co.in",
       owner: "Elena Rodriguez",
       totalOrders: 156,
       lastOrderDate: "Oct 22, 2023",
       bankDetails: {
-        accountName: "TechFlow Systems LLC",
+        accountName: "TechFlow Systems India",
         accountNumber: "**** 4431",
-        routingNumber: "021000021",
-        bankName: "Citibank"
+        routingNumber: "SBIN0000001",
+        bankName: "State Bank of India"
       }
     }
   ]
