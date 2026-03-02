@@ -9,7 +9,7 @@ export const mockData = {
     receivable15Days: 28000.00,
     receivable45Days: 40400.00,
     labourChargesPayable: 15400.00,
-    zincPendingQty: 4.2, // MT
+    zincPendingQty: 358.31, // MT based on sheet
     zincPendingValue: 840000.00 // INR
   },
   monthlyVolume: [
@@ -31,18 +31,6 @@ export const mockData = {
       status: "pending",
       confidence: 98,
       items: [{ desc: "Server Hardware", qty: 2, price: 2000 }, { desc: "Shipping", qty: 1, price: 500 }]
-    },
-    {
-      id: "PUR/24/002",
-      irn: "9876...4321",
-      vendor: "TechFlow Systems",
-      gstin: "29BBBBB1111B1Z2",
-      amount: 1250.50,
-      date: "Oct 22, 2023",
-      dueDate: "Nov 22, 2023",
-      status: "needs_review",
-      confidence: 74,
-      items: [{ desc: "Licenses", qty: 10, price: 125 }]
     }
   ],
   salesInvoices: [
@@ -56,17 +44,6 @@ export const mockData = {
       status: "pending",
       confidence: 99,
       items: [{ desc: "Galvanized Steel", qty: 5, price: 3000 }]
-    },
-    {
-      id: "SAL/24/002",
-      customer: "Tata Steel Ltd",
-      gstin: "24AAATT1234A1Z0",
-      amount: 8200.00,
-      date: "Oct 20, 2023",
-      dueDate: "Nov 15, 2023",
-      status: "needs_review",
-      confidence: 85,
-      items: [{ desc: "Zinc Coating Services", qty: 2, price: 4100 }]
     }
   ],
   vendors: [
@@ -92,28 +69,112 @@ export const mockData = {
       lastTransaction: "Oct 25, 2023",
       contact: "accounts@ril.com",
       owner: "Mukesh A."
-    },
-    {
-      id: "C-002",
-      name: "Tata Steel Ltd",
-      gstin: "24AAATT1234A1Z0",
-      totalOutstanding: 12000,
-      pendingInvoices: 1,
-      lastTransaction: "Oct 20, 2023",
-      contact: "finance@tatasteel.com",
-      owner: "Ratan T."
     }
   ],
-  jobWork: [
+  jobWorkEntries: [
     {
-      vendor: "V-001",
-      challanNo: "CH-9921",
-      date: "Oct 24, 2023",
-      material: "Steel Coil",
-      thickness: "2.5mm",
-      kgsIssued: 5000,
-      zincFormula: "45kg/Ton",
-      expectedZinc: 225
+      id: 1,
+      challan: "J/54",
+      date: "05-08-2025",
+      lorryNo: "WB37A-6326",
+      material: "MS Ladder",
+      pcs: 161,
+      thick: 2.8,
+      partyWt: "NA",
+      ourWt: 5690,
+      rate: "8%",
+      zinc: 455.2
+    },
+    {
+      id: 2,
+      challan: "J/55",
+      date: "05-08-2025",
+      lorryNo: "WB19J-4277",
+      material: "Flat 50x6",
+      pcs: "N/A",
+      thick: 6,
+      partyWt: 14230,
+      ourWt: 14260,
+      rate: "3.60%",
+      zinc: 512.28
+    },
+    {
+      id: 3,
+      challan: "J/61",
+      date: "15-08-2025",
+      lorryNo: "WB37A-6326",
+      material: "Zinc Received",
+      pcs: "N/A",
+      thick: "N/A",
+      partyWt: 0,
+      ourWt: 0,
+      rate: 0,
+      zinc: -1003
+    },
+    {
+      id: 4,
+      challan: "J/100",
+      date: "06-12-2025",
+      lorryNo: "WB11C-6257",
+      material: "Flat 25x3",
+      pcs: "N/A",
+      thick: 3,
+      partyWt: 2330,
+      ourWt: 12340,
+      rate: "7%",
+      zinc: 163.1
+    },
+    {
+      id: 5,
+      challan: "J/105",
+      date: "22/12/2025",
+      lorryNo: "WB11E-3832",
+      material: "Zinc Received",
+      pcs: "N/A",
+      thick: "N/A",
+      partyWt: 0,
+      ourWt: 0,
+      rate: 0,
+      zinc: -1200
+    },
+    {
+      id: 6,
+      challan: "J/114",
+      date: "05-01-2026",
+      lorryNo: "WB11C-6257",
+      material: "Flat 75x10",
+      pcs: "N/A",
+      thick: 10,
+      partyWt: 3900,
+      ourWt: 11800,
+      rate: "3%",
+      zinc: 117
+    },
+    {
+      id: 7,
+      challan: "J/127",
+      date: "06-02-2026",
+      lorryNo: "WB11C-8500",
+      material: "Flat 65x8",
+      pcs: "N/A",
+      thick: 8,
+      partyWt: 9270,
+      ourWt: 12420,
+      rate: "3%",
+      zinc: 278.1
+    },
+    {
+      id: 8,
+      challan: "J/128",
+      date: "07-02-2026",
+      lorryNo: "WB11C-8500",
+      material: "Flat 50x6",
+      pcs: "N/A",
+      thick: 6,
+      partyWt: 2500,
+      ourWt: 10640,
+      rate: "3.60%",
+      zinc: 90
     }
   ],
   purchaseOrders: [
