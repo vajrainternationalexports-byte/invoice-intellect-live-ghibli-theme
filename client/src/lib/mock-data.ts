@@ -3,7 +3,14 @@ export const mockData = {
     totalPending: 45200.50,
     processedToday: 12,
     upcomingPayments: 8,
-    discrepancies: 3
+    discrepancies: 3,
+    totalReceivable: 68400.00,
+    receivableInvoicesCount: 14,
+    receivable15Days: 28000.00,
+    receivable45Days: 40400.00,
+    labourChargesPayable: 15400.00,
+    zincPendingQty: 4.2, // MT
+    zincPendingValue: 840000.00 // INR
   },
   monthlyVolume: [
     { month: 'Jan', amount: 35000 },
@@ -14,8 +21,8 @@ export const mockData = {
   ],
   invoices: [
     {
-      id: "INV-2023-001",
-      irn: "1234567890123456789012345678901234567890123456789012345678901234",
+      id: "PUR/24/001",
+      irn: "1234...5678",
       vendor: "Acme India Pvt Ltd.",
       gstin: "27AAAAA0000A1Z5",
       amount: 4500.00,
@@ -23,61 +30,43 @@ export const mockData = {
       dueDate: "Nov 24, 2023",
       status: "pending",
       confidence: 98,
-      items: [
-        { desc: "Server Hardware", qty: 2, price: 2000 },
-        { desc: "Shipping", qty: 1, price: 500 }
-      ]
+      items: [{ desc: "Server Hardware", qty: 2, price: 2000 }, { desc: "Shipping", qty: 1, price: 500 }]
     },
     {
-      id: "INV-2023-002",
-      irn: "9876543210987654321098765432109876543210987654321098765432109876",
-      vendor: "TechFlow Systems India",
+      id: "PUR/24/002",
+      irn: "9876...4321",
+      vendor: "TechFlow Systems",
       gstin: "29BBBBB1111B1Z2",
       amount: 1250.50,
       date: "Oct 22, 2023",
       dueDate: "Nov 22, 2023",
       status: "needs_review",
       confidence: 74,
-      items: [
-        { desc: "Software Licenses", qty: 10, price: 120.05 },
-        { desc: "Support Fee", qty: 1, price: 50 }
-      ]
-    },
-    {
-      id: "INV-2023-003",
-      irn: "4567890123456789012345678901234567890123456789012345678901234567",
-      vendor: "Global Logistics India",
-      gstin: "19CCCCC2222C1Z3",
-      amount: 890.00,
-      date: "Oct 20, 2023",
-      dueDate: "Nov 20, 2023",
-      status: "processed",
-      confidence: 99,
-      items: [
-        { desc: "Freight Charges Q3", qty: 1, price: 890 }
-      ]
+      items: [{ desc: "Licenses", qty: 10, price: 125 }]
     }
   ],
-  reconciliation: [
+  salesInvoices: [
     {
-      poNumber: "PO-9921",
-      invoiceId: "INV-2023-001",
-      vendor: "Acme India Pvt Ltd.",
-      matchStatus: "matched",
-      poAmount: 4500.00,
-      invAmount: 4500.00,
-      salesOrder: "SO-4432",
-      margin: 25.5
+      id: "SAL/24/001",
+      customer: "Reliance Industries",
+      gstin: "27AAACR0001A1Z1",
+      amount: 15400.00,
+      date: "Oct 25, 2023",
+      dueDate: "Nov 05, 2023",
+      status: "pending",
+      confidence: 99,
+      items: [{ desc: "Galvanized Steel", qty: 5, price: 3000 }]
     },
     {
-      poNumber: "PO-9922",
-      invoiceId: "INV-2023-002",
-      vendor: "TechFlow Systems India",
-      matchStatus: "discrepancy",
-      poAmount: 1100.00,
-      invAmount: 1250.50,
-      salesOrder: "SO-4433",
-      margin: 18.2
+      id: "SAL/24/002",
+      customer: "Tata Steel Ltd",
+      gstin: "24AAATT1234A1Z0",
+      amount: 8200.00,
+      date: "Oct 20, 2023",
+      dueDate: "Nov 15, 2023",
+      status: "needs_review",
+      confidence: 85,
+      items: [{ desc: "Zinc Coating Services", qty: 2, price: 4100 }]
     }
   ],
   vendors: [
@@ -87,54 +76,55 @@ export const mockData = {
       gstin: "27AAAAA0000A1Z5",
       riskScore: "Low",
       totalSpent: 125000,
-      duplicateWarning: false,
       contact: "billing@acme.in",
       owner: "Robert J. Wilson",
       totalOrders: 42,
-      lastOrderDate: "Oct 24, 2023",
-      bankDetails: {
-        accountName: "Acme India Pvt Ltd",
-        accountNumber: "**** 8892",
-        routingNumber: "HDFC0001234",
-        bankName: "HDFC Bank"
-      }
+      bankDetails: { bankName: "HDFC Bank", accountNumber: "**** 8892", routingNumber: "HDFC0001234" }
+    }
+  ],
+  customers: [
+    {
+      id: "C-001",
+      name: "Reliance Industries",
+      gstin: "27AAACR0001A1Z1",
+      totalOutstanding: 45000,
+      pendingInvoices: 3,
+      lastTransaction: "Oct 25, 2023",
+      contact: "accounts@ril.com",
+      owner: "Mukesh A."
     },
     {
-      id: "V-002",
-      name: "Acme Corporation (India)",
-      gstin: "27AAAAA0000A1Z5",
-      riskScore: "High",
-      totalSpent: 4500,
-      duplicateWarning: true,
-      duplicateOf: "V-001",
-      contact: "finance.acme@gmail.com",
-      owner: "Unknown",
-      totalOrders: 2,
-      lastOrderDate: "Oct 15, 2023",
-      bankDetails: {
-        accountName: "Acme Corp",
-        accountNumber: "**** 8892",
-        routingNumber: "ICIC0005678",
-        bankName: "ICICI Bank"
-      }
-    },
+      id: "C-002",
+      name: "Tata Steel Ltd",
+      gstin: "24AAATT1234A1Z0",
+      totalOutstanding: 12000,
+      pendingInvoices: 1,
+      lastTransaction: "Oct 20, 2023",
+      contact: "finance@tatasteel.com",
+      owner: "Ratan T."
+    }
+  ],
+  jobWork: [
     {
-      id: "V-003",
-      name: "TechFlow Systems India",
-      gstin: "29BBBBB1111B1Z2",
-      riskScore: "Low",
-      totalSpent: 89000,
-      duplicateWarning: false,
-      contact: "accounts@techflow.co.in",
-      owner: "Elena Rodriguez",
-      totalOrders: 156,
-      lastOrderDate: "Oct 22, 2023",
-      bankDetails: {
-        accountName: "TechFlow Systems India",
-        accountNumber: "**** 4431",
-        routingNumber: "SBIN0000001",
-        bankName: "State Bank of India"
-      }
+      vendor: "V-001",
+      challanNo: "CH-9921",
+      date: "Oct 24, 2023",
+      material: "Steel Coil",
+      thickness: "2.5mm",
+      kgsIssued: 5000,
+      zincFormula: "45kg/Ton",
+      expectedZinc: 225
+    }
+  ],
+  purchaseOrders: [
+    {
+      id: "PO-2024-001",
+      vendor: "Acme India",
+      date: "Oct 01, 2023",
+      status: "Partially fulfilled",
+      ordered: 100,
+      received: 60,
+      pending: 40
     }
   ]
 };

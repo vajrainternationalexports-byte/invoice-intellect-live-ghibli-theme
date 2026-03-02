@@ -1,0 +1,163 @@
+Objective
+Design a clean, high-efficiency Invoice & Operations Management iOS App with a single-source-of-truth dashboard and a unified Purchase workflow. The system must prioritize speed, minimal data entry, instant visibility of liabilities/receivables, and operational clarity across purchases, sales, job work, and purchase orders.
+
+1. Dashboard (Home Screen)
+The dashboard is the control center. It must surface only decision-critical metrics—no clutter.
+Primary Sections (Clickable Cards)
+1.	Purchase
+2.	Sales
+3.	Job Work
+4.	Purchase Order
+Each card opens its respective module. No sub-navigation from the dashboard beyond these four.
+
+Key Financial & Operational Highlights (Top Summary Area)
+Display as high-contrast numeric tiles:
+1.	Total Pending Payable
+o	Aggregate unpaid purchase invoices
+o	Existing breakdowns remain:
+	Upcoming
+	Discrepancies
+2.	Total Pending Receivable
+o	Aggregate unpaid sales invoices
+o	Mandatory sub-breakdown:
+	Number of invoices pending
+	Amount due within 15 days
+	Amount due within 45 days
+3.	Job Work Exposure
+o	Total Labour Charges Payable
+o	Total Zinc Pending
+	Quantity-based (MT/KG)
+	Optional value mapping if rates exist
+All dashboard metrics must be:
+•	Auto-calculated
+•	Real-time
+•	Tappable → deep-link to filtered records
+
+2. Purchase Module (Single Unified Section) – ALEADY ALL OF THE CURRENT SECTION
+
+3. Sales Module
+Structurally identical to Purchase, but inverted for outbound flow.
+Sales = Purchase Logic × Customer Perspective
+•	Sales invoices instead of purchase invoices
+•	Customers instead of vendors
+•	Receivables instead of payables
+Key Capabilities
+•	Customer search (same strength as vendor search)
+•	Sales invoice aging
+•	Auto-calculated receivables
+•	Direct linkage to dashboard:
+o	Pending invoices count
+o	Within 15 days
+o	Within 45 days
+Consistency between Purchase and Sales is mandatory to reduce cognitive load.
+
+4. Job Work Module
+Dedicated module to track external processing costs and material exposure.
+Core Tracking
+1.	Labour Charges
+o	Vendor-wise
+o	Job-wise
+o	Total payable reflected on dashboard
+2.	Zinc Tracking
+o	Zinc issued – WILL BE FETECHED FROM JOB WORK CHALLAN – TO WHICH VENDOR IT IS DOING, WHEN IT IS GOING, CHALLAN NO., KGS ISSUED, GST NUMBER. 
+o	Zinc consumed (WE WILL ISSUE FORMULA – DIFFERENT VENDOR’S HAVE DIFFERENT % PER TON FOR DIFFERENT THICKNESS OF MATERIAL) – “% PER TON PER THICKNESS DATA WILL BE PRE FEEDED, AUTOMATICALLY FETCHING FROM JOB WORK CHALLAN WILL BE – WHICH VENDOR IS OUR MATERIAL IS GOING, WHAT MATERIAL IS GOING, WHAT THICKNESS IS GOING, WHAT KGS ARE GOING”
+o	Zinc pending (balance)
+o	Quantity-first design (cost optional but supported)
+Dashboard tiles must directly reflect Job Work totals.
+
+5. Purchase Order Module
+Purely order-centric. No invoice noise.
+Functions
+•	Create and manage purchase orders
+•	Track:
+o	Ordered quantity
+o	Received quantity
+o	Pending quantity
+•	Link purchase invoices back to one or multiple purchase orders
+•	Status visibility:
+o	Open
+o	Partially fulfilled
+o	Closed
+
+Design & UX Principles (Non-Negotiable)
+•	Single-tap access to all critical data
+•	Minimal typing; maximum reuse of existing data
+•	Strong search everywhere (vendor, customer, invoice)
+•	Dashboard drives behavior, not reports
+•	All numbers must be reconcilable via tap-through
+
+Clarification Required (Answer immediately)
+1.	Should Total Zinc Pending be shown quantity-only, or quantity + value on the dashboard? BOTH.
+2.	Can a single purchase invoice be linked to multiple purchase orders, or restrict to one-to-one? – ONE TO MANY, AND MANY TO ONE, BOTH POSSIBLE.
+3.	Do you want manual override capability for aging buckets, or strictly system-calculated only? BOTH.
+keep purchase section as it already is. you have already made it. make sales similar to that of purchASE and add much more in sales. 
+
+Constraint (Locked)
+•	Purchase section remains exactly as already defined.
+•	No structural, naming, or behavioral changes to Purchase.
+•	Sales must mirror Purchase one-to-one, with only role reversal (Vendor → Customer, Payable → Receivable), and many more details as and when required.
+
+Sales Module (Mirror of Purchase)
+The Sales section must be a structural and functional clone of Purchase, with terminology and logic inverted for outbound transactions. When the user taps Sales from the dashboard, this module opens.
+
+1. Customer Management (Mirror of Vendor Management)
+•	Central customer list
+•	Global search option (mandatory) Search by:
+o	Customer name
+o	GST
+o	Phone
+o	Sales invoice reference
+•	Customer profile view displays:
+o	Total outstanding receivable
+o	Number of pending sales invoices
+o	Last transaction date
+Behavior, layout, and interaction must be identical to Vendor Management in Purchase.
+
+2. Sales Invoice Handling (Mirror of Purchase Invoices)
+•	Add / view / edit sales invoices
+•	Invoice attributes (identical structure):
+o	Customer
+o	Invoice number
+o	Invoice date
+o	Due date
+o	Invoice value
+o	Tax breakup
+o	Linked sales order (if applicable)
+•	Status indicators:
+o	Paid
+o	Partially paid
+o	Pending
+o	Disputed
+All validation, flows, and UI patterns must match Purchase.
+
+3. Receivable Intelligence (Mirror of Payable Intelligence)
+•	Auto-calculated receivables
+•	Aging buckets (identical logic):
+o	Due
+o	Overdue
+o	Upcoming
+•	Dashboard-linked drill-down:
+o	Total pending receivable
+o	Pending invoice count
+o	Amount due within 15 days
+o	Amount due within 45 days
+No custom logic beyond what exists in Purchase.
+
+4. Discrepancy Handling (Mirror)
+•	Flag discrepancies on:
+o	Quantity mismatch
+o	Rate mismatch
+o	Tax mismatch
+Discrepancy resolution workflow must be identical to Purchase.
+
+Dashboard Integration (Sales)
+•	Sales tile opens Sales module
+•	Dashboard Total Pending Receivable pulls data strictly from Sales
+•	Breakdown logic mirrors Purchase payable logic, inverted
+
+Implementation Rule (Critical)
+If a feature exists in Purchase, it must exist in Sales in the same position, with the same interaction cost, and the same calculation logic—only the business noun changes.
+No additional features. No simplification. No deviation.
+
+Final Check Constraint
+•	A user trained on Purchase must be able to use Sales without learning anything new.

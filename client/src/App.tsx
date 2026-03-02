@@ -11,6 +11,9 @@ import Dashboard from "@/pages/Dashboard";
 import Invoices from "@/pages/Invoices";
 import Reconciliation from "@/pages/Reconciliation";
 import Vendors from "@/pages/Vendors";
+import Sales from "@/pages/Sales";
+import JobWork from "@/pages/JobWork";
+import PurchaseOrder from "@/pages/PurchaseOrder";
 
 function Router() {
   return (
@@ -20,6 +23,9 @@ function Router() {
         <Route path="/invoices" component={Invoices}/>
         <Route path="/reconciliation" component={Reconciliation}/>
         <Route path="/vendors" component={Vendors}/>
+        <Route path="/sales" component={Sales}/>
+        <Route path="/jobwork" component={JobWork}/>
+        <Route path="/po" component={PurchaseOrder}/>
         <Route component={NotFound} />
       </Switch>
     </MobileShell>
