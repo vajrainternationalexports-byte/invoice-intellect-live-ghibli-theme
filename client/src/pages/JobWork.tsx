@@ -13,7 +13,12 @@ import {
   Clock,
   ArrowDownLeft,
   ArrowUpRight,
-  Filter
+  Filter,
+  Layers,
+  Weight,
+  Percent,
+  Truck,
+  Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
