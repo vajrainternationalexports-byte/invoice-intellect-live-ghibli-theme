@@ -1,0 +1,358 @@
+Build a production-grade Job Work module inside an existing iOS industrial operations app.
+
+Primary Purpose:
+Track zinc consumption and zinc return for galvanisation job work vendor.
+System must calculate zinc balance dynamically per vendor and per period.
+
+Scale:
+Up to 10,000 entries per day.
+Cloud-based architecture.
+Multi-user environment.
+Audit logging mandatory.
+
+MODULE STRUCTURE
+
+Create a main section:
+
+JOB WORK
+
+Inside Job Work, create two sub-sections:
+
+Incoming (Zinc Consumption Tracking)
+
+Labour Charges (Separate module, not detailed here but linked by JW No)
+
+1. INCOMING — DATA ENTRY SYSTEM
+
+Purpose:
+Record material sent for galvanisation and zinc consumed by job worker.
+
+Each record = One JW / Challan.
+
+JW number is globally unique.
+Cannot repeat across dates.
+
+One JW → One Lorry only.
+One Lorry → Can have multiple JW.
+
+ENTRY FORM STRUCTURE
+Header Fields
+
+SI No (Auto incremental, global, never resets)
+
+JW / Challan No (Unique, mandatory, validation required)
+
+Date (Date picker)
+
+Lorry No (Text input)
+
+Vendor (Pre-selected if module is vendor specific; otherwise dropdown)
+
+MULTI-MATERIAL LINE SUPPORT (CRITICAL)
+
+Each JW must support multiple material lines.
+
+Add “Add Material Line” button.
+
+Each material line contains:
+
+Material (Dropdown + Custom)
+
+Thickness (mm) (Optional — mandatory except for Zinc Received)
+
+Pcs (Optional; can be blank)
+
+Party Weight (kg) (Reference only)
+
+Our Weight (kg) (Mandatory)
+
+Rate (%) (Mandatory)
+
+Zinc (Auto-calculated)
+
+CALCULATION ENGINE
+Zinc Consumed Formula
+
+Zinc Consumed = Our Weight × Rate %
+
+Rate varies by:
+
+Thickness
+
+Vendor
+
+Party Weight does NOT affect calculation.
+
+Our Weight is final weight used for zinc % calculation.
+
+Precision: configurable decimals.
+Rounding rules: configurable.
+
+SPECIAL MATERIAL: “ZINC RECEIVED”
+
+If Material = “Zinc Received”:
+
+Behavior:
+
+Zinc value entered manually OR calculated as 100% of weight.
+
+System treats this value as NEGATIVE consumption.
+
+This subtracts from zinc consumed balance.
+
+ZINC BALANCE LOGIC
+
+Maintain vendor-wise running zinc ledger.
+
+Zinc Ledger Formula:
+
+Total Zinc Consumed
+– Zinc Received
+= Net Zinc Balance
+
+Interpretation:
+
+If Net Balance > 0 → Company must send more zinc to job worker.
+If Net Balance < 0 → Job worker holds excess zinc.
+
+System must show:
+
+Running Zinc Balance
+
+Monthly surplus summary
+
+Vendor-wise zinc statement
+
+BOTTOM SUMMARY BAR (Sticky)
+
+Display:
+
+Total Our Weight (for current filtered view)
+
+Total Zinc Consumed
+
+Total Zinc Received
+
+Net Zinc Balance
+
+Updates live.
+
+LIST VIEW (TABLE MODE)
+
+Optimized mobile table.
+
+Columns:
+
+SI No
+
+JW No
+
+Date
+
+Lorry No
+
+Total Our Weight
+
+Total Zinc Consumed
+
+Net Zinc Impact
+
+Tap → Full detail view
+Swipe → Edit / Delete / Duplicate
+
+OCR INTEGRATION (MANDATORY)
+
+Allow Challan Upload:
+
+Camera scan
+
+Image upload
+
+System must:
+
+Extract JW No
+
+Date
+
+Lorry No
+
+Material lines
+
+Weight
+
+Thickness
+
+Rate (if visible)
+
+Use OCR + structured parsing engine.
+User must review before final save.
+
+REPORTING (JOB WORK HOME SCREEN)
+
+Create Job Work Dashboard:
+
+1. Zinc Summary Widget
+
+Total Zinc Consumed (Month)
+
+Total Zinc Received (Month)
+
+Net Zinc Balance
+
+Surplus Indicator
+
+2. Vendor-wise Zinc Summary
+3. Monthly Surplus Report
+
+“Zinc consumed after deducting zinc sent”
+
+Filter options:
+
+Date range
+
+Vendor
+
+LABOUR CHARGES MODULE (STRUCTURAL PLACEHOLDER)
+
+Linked by JW No.
+
+Separate entry for:
+
+Material returned
+
+Labour rate
+
+Labour amount
+
+Linking to same JW
+
+No stock integration required.
+
+DATA RULES
+
+JW No must be unique.
+
+Cannot edit JW No after save.
+
+All users can edit entries.
+
+Audit trail required:
+
+Who created
+
+Who edited
+
+Timestamp
+
+Before/after value
+
+PERMISSIONS
+
+Multi-user
+
+No role-based restrictions
+
+All users can edit
+
+Audit log mandatory
+
+ARCHITECTURE REQUIREMENTS
+
+Platform: iOS native
+Backend: Cloud-based (scalable for 10,000 daily entries)
+Database: High-write optimized
+Real-time sync
+Offline caching optional but not required
+Web Admin Panel required for:
+
+Data viewing
+
+Editing
+
+Exporting
+
+Audit tracking
+
+Vendor configuration
+
+Rate configuration by thickness
+
+CONFIGURATION PANEL (ADMIN)
+
+Admin must be able to:
+
+Set Zinc Rate % by:
+
+Vendor
+
+Thickness
+
+Configure decimal precision
+
+Configure rounding rules
+
+Lock past months if needed
+
+VALIDATION RULES
+
+JW No required
+
+Date required
+
+Our Weight required
+
+Rate required (except Zinc Received)
+
+Thickness required (except Zinc Received)
+
+Prevent duplicate JW
+
+PERFORMANCE REQUIREMENTS
+
+Must handle 10,000 daily entries
+
+Fast form submission
+
+Optimized list rendering
+
+Efficient cloud queries
+
+Pagination required
+
+UX DESIGN DIRECTIVES
+
+Industrial minimal interface
+
+Numeric keypad for all numeric fields
+
+Highlight calculated Zinc field
+
+Sticky summary bar
+
+Fast-entry optimized
+
+No visual clutter
+
+OUTPUT EXPECTATION FROM BUILDER
+
+Generate:
+
+Complete database schema
+
+API structure
+
+Zinc calculation service logic
+
+OCR parsing logic
+
+iOS UI screen layout
+
+Web admin panel structure
+
+Dashboard widgets
+
+Audit trail structure
+
+Cloud scaling architecture
+
+Deliver production-ready architecture.
