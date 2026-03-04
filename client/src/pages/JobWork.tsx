@@ -109,6 +109,36 @@ export default function JobWork() {
     return { basic, gstAmount, tds, payable };
   }, [labourForm.total, labourForm.gstPercent]);
 
+  const handleSave = () => {
+    if (!formHeader.challan) {
+      toast.error("Challan No is mandatory");
+      return;
+    }
+    const newEntry = {
+      id: Date.now(),
+      ...formHeader,
+      items: formItems
+    };
+    setEntries([newEntry, ...entries]);
+    setIsEntryDrawerOpen(false);
+    toast.success("Job Work Entry Saved");
+  };
+
+  const handleScan = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setFormHeader({
+        challan: "J/" + Math.floor(Math.random() * 500),
+        date: format(new Date(), "yyyy-MM-dd"),
+        lorryNo: "WB11C-" + Math.floor(Math.random() * 9999),
+        vendor: "Acme India Pvt Ltd."
+      });
+      setFormItems([{ material: "Flat 50x6", thick: "6", pcs: "120", partyWt: "4500", ourWt: "4520", rate: "3.6", zinc: 162.72 }]);
+      setIsScanning(false);
+      toast.info("OCR Extraction Successful");
+    }, 2000);
+  };
+
   const handleLabourSave = () => {
     if (!labourForm.invNo || !labourForm.total) {
       toast.error("Invoice No and Total Amount are mandatory");
@@ -362,19 +392,113 @@ export default function JobWork() {
       <Drawer open={isEntryDrawerOpen} onOpenChange={setIsEntryDrawerOpen}>
         <DrawerContent className="max-h-[92dvh] bg-white rounded-t-[2.5rem]">
            <div className="p-6 space-y-6 overflow-y-auto no-scrollbar pb-10">
-              <DrawerHeader className="p-0 text-left">
-                <div className="flex justify-between items-center mb-4">
-                   <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><Layers size={20} /></div>
-                   <DrawerClose className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></DrawerClose>
+            <DrawerHeader className="p-0 text-left">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex gap-2">
+                  <button onClick={handleScan} className="h-10 px-3 bg-primary/5 text-primary rounded-xl flex items-center gap-2 text-xs font-bold transition-all active:scale-95">
+                    <Camera size={16} /> Scan Challan
+                  </button>
                 </div>
-                <DrawerTitle className="text-xl font-bold">New Incoming Entry</DrawerTitle>
-              </DrawerHeader>
-              {/* Form implementation mirrors previous logic */}
-              <div className="space-y-4">
-                  <Input placeholder="Challan No" value={formHeader.challan} onChange={(e) => setFormHeader({...formHeader, challan: e.target.value})} className="h-11 rounded-xl bg-gray-50" />
-                  <Input type="date" value={formHeader.date} onChange={(e) => setFormHeader({...formHeader, date: e.target.value})} className="h-11 rounded-xl bg-gray-50" />
-                  <button onClick={handleSave} className="w-full bg-primary text-white py-4 rounded-2xl font-bold">Confirm Entry</button>
+                <DrawerClose className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></DrawerClose>
               </div>
+              <DrawerTitle className="text-xl font-bold">New Incoming Entry</DrawerTitle>
+            </DrawerHeader>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-black uppercase text-gray-400 ml-1">Challan No</Label>
+                  <Input placeholder="e.g. CH-2024-001" value={formHeader.challan} onChange={(e) => setFormHeader({...formHeader, challan: e.target.value})} className="h-11 rounded-xl bg-gray-50 text-sm font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-black uppercase text-gray-400 ml-1">Lorry No</Label>
+                  <Input placeholder="Vehicle No" value={formHeader.lorryNo} onChange={(e) => setFormHeader({...formHeader, lorryNo: e.target.value})} className="h-11 rounded-xl bg-gray-50 text-sm font-mono" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase text-gray-400 ml-1">Date</Label>
+                <Input type="date" value={formHeader.date} onChange={(e) => setFormHeader({...formHeader, date: e.target.value})} className="h-11 rounded-xl bg-gray-50" />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase text-gray-400 ml-1">Vendor</Label>
+                <select 
+                  value={formHeader.vendor} 
+                  onChange={(e) => setFormHeader({...formHeader, vendor: e.target.value})}
+                  className="h-11 w-full rounded-xl bg-gray-50 border-0 px-3 text-sm font-bold"
+                >
+                  {mockData.vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                </select>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-[9px] font-black uppercase text-gray-400">Items (Zinc Calc)</Label>
+                  <button onClick={() => setFormItems([...formItems, { material: "", thick: "", pcs: "", partyWt: "", ourWt: "", rate: "", zinc: 0 }])} className="text-primary text-[10px] font-bold flex items-center gap-1">
+                    <Plus size={12} /> Add Row
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {formItems.map((item, idx) => (
+                    <div key={idx} className="bg-gray-50 p-3 rounded-2xl space-y-3 border border-gray-100">
+                      <div className="flex justify-between items-start">
+                        <Input placeholder="Material Description" value={item.material} onChange={(e) => {
+                          const newItems = [...formItems];
+                          newItems[idx].material = e.target.value;
+                          setFormItems(newItems);
+                        }} className="h-9 bg-white border-0 text-xs font-bold" />
+                        <button onClick={() => setFormItems(formItems.filter((_, i) => i !== idx))} className="p-2 text-rose-400"><Trash2 size={14} /></button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Input placeholder="Thick" value={item.thick} onChange={(e) => {
+                          const newItems = [...formItems];
+                          newItems[idx].thick = e.target.value;
+                          setFormItems(newItems);
+                        }} className="h-9 bg-white border-0 text-[10px]" />
+                        <Input placeholder="Pcs" value={item.pcs} onChange={(e) => {
+                          const newItems = [...formItems];
+                          newItems[idx].pcs = e.target.value;
+                          setFormItems(newItems);
+                        }} className="h-9 bg-white border-0 text-[10px]" />
+                        <Input placeholder="Rate %" value={item.rate} onChange={(e) => {
+                          const newItems = [...formItems];
+                          newItems[idx].rate = e.target.value;
+                          // Recalc zinc
+                          const wt = parseFloat(item.ourWt) || 0;
+                          const r = parseFloat(e.target.value) || 0;
+                          newItems[idx].zinc = (wt * r) / 100;
+                          setFormItems(newItems);
+                        }} className="h-9 bg-white border-0 text-[10px]" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                         <div className="space-y-1">
+                           <Label className="text-[8px] uppercase text-gray-400 ml-1">Our Wt (KG)</Label>
+                           <Input placeholder="Our Wt" value={item.ourWt} onChange={(e) => {
+                             const newItems = [...formItems];
+                             newItems[idx].ourWt = e.target.value;
+                             // Recalc zinc
+                             const wt = parseFloat(e.target.value) || 0;
+                             const r = parseFloat(item.rate) || 0;
+                             newItems[idx].zinc = (wt * r) / 100;
+                             setFormItems(newItems);
+                           }} className="h-9 bg-white border-0 text-xs font-black" />
+                         </div>
+                         <div className="space-y-1 text-right">
+                           <Label className="text-[8px] uppercase text-gray-400 mr-1">Zinc Consumed</Label>
+                           <p className="text-xs font-black text-primary pt-2">{item.zinc.toFixed(2)} KG</p>
+                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={handleSave} className="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all active:scale-95">
+                <Save size={20} /> Save Entry
+              </button>
+            </div>
            </div>
         </DrawerContent>
       </Drawer>
