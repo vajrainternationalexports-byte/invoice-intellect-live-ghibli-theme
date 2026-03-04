@@ -9,8 +9,8 @@ export const mockData = {
     receivable15Days: 28000.00,
     receivable45Days: 40400.00,
     labourChargesPayable: 15400.00,
-    zincPendingQty: 358.31, // KG
-    zincPendingValue: 840000.00 // INR
+    zincPendingQty: 358.31,
+    zincPendingValue: 840000.00
   },
   monthlyVolume: [
     { month: 'Jan', amount: 35000 },
@@ -47,8 +47,8 @@ export const mockData = {
     }
   ],
   vendors: [
-    { id: "V-001", name: "Acme India Pvt Ltd." },
-    { id: "V-002", name: "Bharat Industrial" }
+    { id: "V-001", name: "Acme India Pvt Ltd.", labourOutstanding: 12500, totalPaid: 45000 },
+    { id: "V-002", name: "Bharat Industrial", labourOutstanding: 8400, totalPaid: 22000 }
   ],
   jobWorkEntries: [
     {
@@ -80,6 +80,35 @@ export const mockData = {
       items: [
         { material: "Zinc Received", thick: 0, pcs: 0, partyWt: 0, ourWt: 0, rate: 0, zinc: -1003 }
       ]
+    }
+  ],
+  labourInvoices: [
+    {
+      id: "L-101",
+      vendor: "Acme India Pvt Ltd.",
+      invNo: "INV/LB/001",
+      date: "2024-03-01",
+      vehicleNo: "WB11C-1234",
+      weight: 1250,
+      rate: 10,
+      basic: 12500,
+      gstRate: 18,
+      gstAmount: 2250,
+      total: 14750,
+      tds: 250,
+      payable: 14500,
+      status: "pending"
+    }
+  ],
+  purchaseOrders: [
+    {
+      id: "PO-2024-001",
+      vendor: "Acme India",
+      date: "Oct 01, 2023",
+      status: "Partially fulfilled",
+      ordered: 100,
+      received: 60,
+      pending: 40
     }
   ]
 };

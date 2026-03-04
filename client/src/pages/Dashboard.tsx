@@ -3,12 +3,10 @@ import { mockData } from "@/lib/mock-data";
 import { 
   ArrowUpRight, 
   ArrowDownLeft, 
-  Clock, 
-  AlertCircle, 
   Layers, 
   ShoppingBag, 
-  TrendingUp,
-  ChevronRight 
+  ChevronRight,
+  Receipt
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -99,7 +97,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Zinc Pending</p>
-              <p className="text-lg font-bold text-amber-600">{stats.zincPendingQty} MT</p>
+              <p className="text-lg font-bold text-amber-600">{stats.zincPendingQty} KG</p>
               <p className="text-[9px] text-gray-400 font-medium mt-0.5">Value: ₹{(stats.zincPendingValue/100000).toFixed(1)}L</p>
             </div>
           </div>
