@@ -1,0 +1,268 @@
+## PROMPT — ADD LABOUR COST SECTION INSIDE JOB WORK MODULE
+
+Extend the existing **Job Work** module by adding a new structured section called:
+
+# LABOUR COST
+
+Purpose:
+Track vendor-wise labour invoices raised for galvanisation work and compute payable amount after TDS adjustment.
+
+This section is independent of Zinc Ledger but linked vendor-wise and vehicle-wise.
+
+---
+
+# STRUCTURE
+
+Create a new subsection inside Job Work:
+
+1. Incoming (Zinc Tracking)
+2. Labour Cost (New Section)
+
+---
+
+# LABOUR COST — CORE LOGIC
+
+Labour Cost is calculated based on:
+
+Vendor-wise
+Material Received (in kg)
+×
+Cost per kg charged by vendor
+
+However, invoice amount shared by vendor is:
+
+Total Amount (Inclusive of GST)
+
+System must reverse-calculate and apply TDS.
+
+---
+
+# DATA ENTRY METHODS
+
+Two entry modes:
+
+1. Upload Invoice (PDF/Image)
+2. Click Photo (Camera Capture)
+
+Use OCR + structured parsing engine similar to Purchase module.
+
+Extract:
+
+* Vendor Name
+* Invoice Number
+* Invoice Date
+* Vehicle / Lorry Number
+* Material Received (kg)
+* Rate per kg
+* Basic Amount
+* GST %
+* GST Amount
+* Total Invoice Amount (Inclusive of GST)
+
+User must confirm before final save.
+
+Manual entry option also required.
+
+---
+
+# CALCULATION ENGINE
+
+Invoice shared by vendor = Total Amount (Inclusive of GST)
+
+System must:
+
+Step 1: Identify GST % from invoice (12% or 18% typically)
+
+Step 2: Reverse-calculate Basic Amount
+Basic = Total / (1 + GST%)
+
+Step 3: Calculate TDS
+TDS = 2% of Basic Amount
+
+Step 4: Final Payable Amount
+Payable = Total Invoice Amount – TDS
+
+Important Rule:
+GST is calculated on full Basic.
+TDS is deducted only on Basic.
+GST is NOT reduced due to TDS.
+
+Store:
+
+* Basic Amount
+* GST %
+* GST Amount
+* TDS (2%)
+* Net Payable
+* Gross Invoice Amount
+
+All values stored with configurable decimal precision.
+
+---
+
+# LABOUR ENTRY FORM
+
+Fields:
+
+Header Section:
+
+* Vendor (Dropdown)
+* Invoice Number (Unique per vendor)
+* Invoice Date
+* Vehicle No (Optional)
+* Linked JW No(s) (Optional multi-select)
+* Upload Invoice (OCR option)
+
+Calculation Section:
+
+* Material Received (kg)
+* Rate per kg
+* Computed Basic (editable if needed)
+* GST %
+* GST Amount (auto)
+* Total Invoice Amount (inclusive)
+* TDS (2% auto)
+* Net Payable (auto)
+
+Validation:
+
+* Invoice number required
+* GST % required
+* Total amount required
+
+---
+
+# DASHBOARD VIEW — LABOUR COST
+
+On clicking Labour Cost section:
+
+Show vendor-wise summary cards:
+
+For each Vendor:
+
+* Total Invoice Amount
+* Total TDS Deducted
+* Total Payable
+* Total Paid
+* Outstanding Balance
+
+---
+
+# PAYMENT SYSTEM (LIKE PURCHASE MODULE)
+
+For each vendor:
+
+Show:
+
+* Total Outstanding
+* Make Payment button
+
+Payment Entry Screen:
+
+* Payment Date
+* Amount Paid
+* Payment Mode
+* Reference Number
+* Notes
+
+System auto-adjusts outstanding balance.
+
+Allow:
+
+* Partial payments
+* Multiple payments per invoice
+
+---
+
+# REPORTING
+
+Generate:
+
+1. Vendor-wise Labour Summary
+2. Monthly Labour Cost Report
+3. TDS Deduction Report
+4. Outstanding Vendor Payable Report
+5. Invoice-level breakdown
+6. Export to Excel / PDF
+
+---
+
+# DATA RELATIONSHIPS
+
+Labour Cost must be:
+
+* Vendor-linked
+* Optionally linked to JW No
+* Optionally linked to vehicle
+
+Must NOT affect:
+
+* Zinc ledger
+* Stock ledger
+
+---
+
+# ADMIN CONFIGURATION
+
+Admin panel must allow:
+
+* Set default TDS % (default 2%)
+* GST validation rules
+* Lock past months
+* Edit permissions
+* Decimal precision
+* Rounding rules
+
+---
+
+# PERFORMANCE REQUIREMENTS
+
+* Must support 10,000+ entries per day
+* Fast OCR processing
+* High-write cloud database
+* Efficient vendor aggregation queries
+* Pagination required
+
+---
+
+# AUDIT TRAIL
+
+Track:
+
+* Created by
+* Edited by
+* Timestamp
+* Before/after value changes
+* Payment adjustments
+
+---
+
+# UX REQUIREMENTS
+
+* Industrial minimal design
+* Highlight calculated fields
+* Clear separation between:
+
+  * Gross Amount
+  * TDS
+  * Net Payable
+* Sticky summary bar in vendor view
+* Fast entry optimized
+
+---
+
+# EXPECTED OUTPUT FROM BUILDER
+
+Generate:
+
+* Database schema
+* Invoice parsing logic
+* TDS + GST calculation service
+* Vendor ledger structure
+* Payment adjustment logic
+* iOS screen layouts
+* Web admin panel structure
+* Reporting architecture
+* Cloud scaling plan
+
+Deliver production-grade implementation blueprint.

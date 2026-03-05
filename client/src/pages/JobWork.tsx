@@ -57,10 +57,11 @@ export default function JobWork() {
     invNo: "",
     date: format(new Date(), "yyyy-MM-dd"),
     vehicleNo: "",
-    weight: "",
-    rate: "",
+    weight: "", // Material Received (kg)
+    rate: "",   // Rate per kg
     gstPercent: "18",
-    total: ""
+    total: "",  // Total Invoice Amount (Inclusive)
+    linkedJW: [] as string[]
   });
 
   const totals = useMemo(() => {
@@ -97,14 +98,23 @@ export default function JobWork() {
     );
   }, [entries, searchQuery]);
 
-  // Labour Calculations
+  // Labour Calculations - Follow PROMPT Logic word-for-word
   const labourCalculations = useMemo(() => {
     const total = parseFloat(labourForm.total) || 0;
     const gstRate = parseFloat(labourForm.gstPercent) || 18;
+    
+    // Step 2: Reverse-calculate Basic Amount
+    // Basic = Total / (1 + GST%)
     const basic = total / (1 + gstRate / 100);
-    const gstAmount = total - basic;
+    
+    // Step 3: Calculate TDS (2% of Basic Amount)
     const tds = basic * 0.02;
+    
+    // Step 4: Final Payable Amount
+    // Payable = Total Invoice Amount – TDS
     const payable = total - tds;
+    
+    const gstAmount = total - basic;
 
     return { basic, gstAmount, tds, payable };
   }, [labourForm.total, labourForm.gstPercent]);
@@ -158,13 +168,17 @@ export default function JobWork() {
   const handleLabourScan = () => {
     setIsScanning(true);
     setTimeout(() => {
+      const randomTotal = Math.floor(Math.random() * 20000) + 5000;
       setLabourForm({
         ...labourForm,
         invNo: "INV/LB/" + Math.floor(Math.random() * 999),
         vehicleNo: "WB11C-" + Math.floor(Math.random() * 9999),
         weight: "1250",
-        rate: "10.5",
-        total: "15487"
+        rate: "12.40",
+        total: randomTotal.toString(),
+        vendor: mockData.vendors[0].name,
+        date: format(new Date(), "yyyy-MM-dd"),
+        gstPercent: "18"
       });
       setIsScanning(false);
       toast.info("Labour Invoice Extracted");
@@ -252,7 +266,7 @@ export default function JobWork() {
           </>
         ) : (
           /* Labour Cost Section */
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="bg-emerald-600 rounded-3xl p-5 text-white shadow-xl shadow-emerald-100">
                <div className="flex justify-between items-start mb-4">
                   <div className="space-y-0.5">
@@ -273,27 +287,66 @@ export default function JobWork() {
                </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="flex gap-2">
+              <button onClick={() => setIsLabourDrawerOpen(true)} className="flex-1 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold shadow-sm active:scale-95 transition-all">
+                <Plus size={16} className="text-emerald-600" /> New Entry
+              </button>
+              <button onClick={handleLabourScan} className="flex-1 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold shadow-sm active:scale-95 transition-all">
+                <Camera size={16} className="text-emerald-600" /> Scan
+              </button>
+            </div>
+
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              <button className="flex-1 py-1.5 text-[10px] font-bold rounded-lg bg-white shadow-sm">All</button>
+              <button className="flex-1 py-1.5 text-[10px] font-bold rounded-lg text-gray-500">Pending</button>
+              <button className="flex-1 py-1.5 text-[10px] font-bold rounded-lg text-gray-500">Needs Review</button>
+            </div>
+
+            <div className="space-y-3">
                <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Vendor Summary</h3>
                {mockData.vendors.map((v: any, i) => (
-                 <div key={i} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-                    <div className="flex justify-between items-center">
-                       <h4 className="font-bold text-gray-900 text-sm">{v.name}</h4>
-                       <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider">Active</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
+                 <div key={i} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm space-y-4">
+                    <div className="flex justify-between items-start">
                        <div>
-                          <p className="text-[8px] text-gray-400 font-bold uppercase">Outstanding</p>
-                          <p className="text-sm font-black text-rose-600">₹{v.labourOutstanding.toLocaleString('en-IN')}</p>
+                         <div className="flex items-center gap-2 mb-1">
+                           <h4 className="font-bold text-gray-900 text-sm">{v.name}</h4>
+                           <div className="h-4 w-4 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><path d="M20 6L9 17L4 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                           </div>
+                         </div>
+                         <p className="text-[10px] font-medium text-gray-400">GSTIN: {v.gstin}</p>
                        </div>
                        <div className="text-right">
-                          <p className="text-[8px] text-gray-400 font-bold uppercase">Total Paid</p>
-                          <p className="text-sm font-black text-emerald-600">₹{v.totalPaid.toLocaleString('en-IN')}</p>
+                         <p className="text-lg font-black text-gray-900">₹{v.labourOutstanding.toLocaleString('en-IN')}</p>
+                         <p className="text-[9px] font-bold text-amber-500 flex items-center justify-end gap-1 uppercase">
+                           <History size={10} /> Pending
+                         </p>
                        </div>
                     </div>
-                    <button className="w-full bg-gray-900 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all">
-                       <CreditCard size={14} /> Make Payment
-                    </button>
+
+                    <div className="grid grid-cols-2 gap-3">
+                       <button className="flex-1 bg-primary text-white py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-primary/20">
+                          <CreditCard size={14} /> Pay
+                       </button>
+                       <button className="flex-1 bg-gray-50 text-gray-900 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all">
+                          <History size={14} /> Schedule
+                       </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 text-center">
+                       <div>
+                          <p className="text-[7px] text-gray-400 font-bold uppercase">Total Invoiced</p>
+                          <p className="text-[10px] font-black text-gray-700">₹{v.labourOutstanding.toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
+                       </div>
+                       <div>
+                          <p className="text-[7px] text-gray-400 font-bold uppercase">TDS Deducted</p>
+                          <p className="text-[10px] font-black text-rose-500">₹{((v.labourOutstanding / 1.18) * 0.02).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
+                       </div>
+                       <div>
+                          <p className="text-[7px] text-gray-400 font-bold uppercase">Outstanding</p>
+                          <p className="text-[10px] font-black text-emerald-600">₹{(v.labourOutstanding - ((v.labourOutstanding / 1.18) * 0.02)).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
+                       </div>
+                    </div>
                  </div>
                ))}
             </div>
@@ -326,33 +379,71 @@ export default function JobWork() {
             <DrawerHeader className="p-0 text-left">
               <div className="flex justify-between items-center mb-4">
                 <button onClick={handleLabourScan} className="h-10 px-3 bg-emerald-50 text-emerald-600 rounded-xl flex items-center gap-2 text-xs font-bold transition-all active:scale-95">
-                  <Camera size={16} /> Scan Invoice
+                  <Camera size={16} /> OCR Scan
                 </button>
                 <DrawerClose className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></DrawerClose>
               </div>
               <DrawerTitle className="text-xl font-bold text-gray-900">New Labour Invoice</DrawerTitle>
+              <DrawerDescription className="text-xs">Reverse-calculate Basic & TDS from Total Amount</DrawerDescription>
             </DrawerHeader>
 
             <div className="space-y-4">
-               <div className="grid grid-cols-2 gap-3">
+               {/* Header Section */}
+               <div className="space-y-3">
                   <div className="space-y-1">
-                    <Label className="text-[9px] font-black uppercase text-gray-400 ml-1">Invoice No</Label>
-                    <Input value={labourForm.invNo} onChange={(e) => setLabourForm({...labourForm, invNo: e.target.value})} className="h-11 rounded-xl bg-gray-50 text-sm font-mono" />
+                    <Label className="text-[10px] font-bold uppercase text-gray-400">Vendor</Label>
+                    <select 
+                      value={labourForm.vendor} 
+                      onChange={(e) => setLabourForm({...labourForm, vendor: e.target.value})}
+                      className="h-11 w-full rounded-xl bg-gray-50 border-0 px-3 text-sm font-bold"
+                    >
+                      {mockData.vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                    </select>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-black uppercase text-gray-400 ml-1">Vehicle No</Label>
-                    <Input value={labourForm.vehicleNo} onChange={(e) => setLabourForm({...labourForm, vehicleNo: e.target.value})} className="h-11 rounded-xl bg-gray-50 text-sm font-mono" />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-gray-400">Invoice Number</Label>
+                      <Input value={labourForm.invNo} onChange={(e) => setLabourForm({...labourForm, invNo: e.target.value})} className="h-11 rounded-xl bg-gray-50 text-sm font-mono" placeholder="INV/2024/..." />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-gray-400">Invoice Date</Label>
+                      <Input type="date" value={labourForm.date} onChange={(e) => setLabourForm({...labourForm, date: e.target.value})} className="h-11 rounded-xl bg-gray-50" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-gray-400">Vehicle No (Optional)</Label>
+                      <Input value={labourForm.vehicleNo} onChange={(e) => setLabourForm({...labourForm, vehicleNo: e.target.value})} className="h-11 rounded-xl bg-gray-50 text-sm font-mono" placeholder="WB..." />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-gray-400">Linked JW No(s)</Label>
+                      <Input placeholder="Select Challans..." className="h-11 rounded-xl bg-gray-50 text-xs" readOnly />
+                    </div>
                   </div>
                </div>
 
-               <div className="bg-gray-50 p-4 rounded-2xl space-y-4 border border-gray-100">
+               {/* Calculation Section */}
+               <div className="bg-gray-50 p-5 rounded-3xl space-y-4 border border-gray-100">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-gray-400">Material Received (kg)</Label>
+                      <Input type="number" value={labourForm.weight} onChange={(e) => setLabourForm({...labourForm, weight: e.target.value})} className="h-11 rounded-xl bg-white text-sm font-black" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-gray-400">Rate per kg</Label>
+                      <Input type="number" value={labourForm.rate} onChange={(e) => setLabourForm({...labourForm, rate: e.target.value})} className="h-11 rounded-xl bg-white text-sm font-black" />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1">
-                        <Label className="text-[9px] font-black uppercase text-gray-400">Total Amount (Inc. GST)</Label>
-                        <Input type="number" value={labourForm.total} onChange={(e) => setLabourForm({...labourForm, total: e.target.value})} className="h-11 rounded-xl bg-white text-lg font-black" />
+                        <Label className="text-[10px] font-bold uppercase text-gray-400">Total Invoice Amount (Inclusive)</Label>
+                        <Input type="number" value={labourForm.total} onChange={(e) => setLabourForm({...labourForm, total: e.target.value})} className="h-11 rounded-xl bg-white text-lg font-black border-emerald-200" />
                      </div>
                      <div className="space-y-1">
-                        <Label className="text-[9px] font-black uppercase text-gray-400">GST %</Label>
+                        <Label className="text-[10px] font-bold uppercase text-gray-400">GST %</Label>
                         <select value={labourForm.gstPercent} onChange={(e) => setLabourForm({...labourForm, gstPercent: e.target.value})} className="h-11 w-full rounded-xl bg-white border border-gray-200 px-3 text-sm font-bold">
                            <option value="12">12%</option>
                            <option value="18">18%</option>
@@ -360,28 +451,28 @@ export default function JobWork() {
                      </div>
                   </div>
 
-                  <div className="space-y-3 pt-2 border-t border-gray-200">
+                  <div className="space-y-3 pt-4 border-t border-gray-200">
                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400 font-bold uppercase">Basic Amount</span>
-                        <span className="font-bold text-gray-900">₹{labourCalculations.basic.toFixed(2)}</span>
+                        <span className="text-gray-400 font-bold uppercase">Computed Basic</span>
+                        <span className="font-bold text-gray-900">₹{labourCalculations.basic.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                      </div>
                      <div className="flex justify-between items-center text-xs">
                         <span className="text-gray-400 font-bold uppercase">GST Amount</span>
-                        <span className="font-bold text-gray-900">₹{labourCalculations.gstAmount.toFixed(2)}</span>
+                        <span className="font-bold text-gray-900">₹{labourCalculations.gstAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                      </div>
                      <div className="flex justify-between items-center text-xs">
                         <span className="text-rose-500 font-black uppercase">TDS (2%) Deducted</span>
-                        <span className="font-black text-rose-500">-₹{labourCalculations.tds.toFixed(2)}</span>
+                        <span className="font-black text-rose-500">-₹{labourCalculations.tds.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                      </div>
-                     <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-300">
+                     <div className="flex justify-between items-center pt-3 border-t border-dashed border-gray-300">
                         <span className="text-sm font-black uppercase text-emerald-600">Net Payable</span>
-                        <span className="text-xl font-black text-emerald-600">₹{labourCalculations.payable.toFixed(2)}</span>
+                        <span className="text-2xl font-black text-emerald-600">₹{labourCalculations.payable.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                      </div>
                   </div>
                </div>
 
                <button onClick={handleLabourSave} className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 transition-all active:scale-95">
-                  <Save size={20} /> Save Labour Invoice
+                  <Save size={20} /> Confirm & Save Labour Invoice
                </button>
             </div>
           </div>

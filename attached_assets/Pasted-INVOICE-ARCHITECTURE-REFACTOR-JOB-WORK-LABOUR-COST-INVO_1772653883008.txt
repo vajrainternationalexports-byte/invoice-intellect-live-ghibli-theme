@@ -1,0 +1,297 @@
+INVOICE ARCHITECTURE REFACTOR + JOB WORK LABOUR COST INVOICE SYSTEM
+
+Refactor the invoice architecture across the application to remove duplication, centralize logic, and extend the same invoice framework to the Job Work → Labour Cost module.
+
+The system must use a shared invoice engine while allowing different modules (Purchase and Job Work) to consume the same components.
+
+1. REMOVE DUPLICATE INVOICE SECTION FROM HOME
+
+Delete the entire Invoices block currently displayed at the bottom of the Home / Dashboard page.
+
+Reason:
+Invoice management already exists under the Purchase module. The dashboard must not contain a second invoice interface.
+
+Required action:
+
+Remove UI component
+
+Remove related queries
+
+Remove redundant dashboard widgets referencing invoices
+
+Dashboard should remain a high-level summary only, not an invoice management interface.
+
+2. CENTRALIZE INVOICES UNDER PURCHASE MODULE
+
+Invoices must exist only inside the Purchase module.
+
+Structure:
+
+Purchase
+└── Invoices
+  ├── All
+  ├── Pending
+  └── Needs Review
+
+Tab behavior:
+
+All
+Shows every purchase invoice.
+
+Pending
+Invoices approved but not yet paid.
+
+Needs Review
+Invoices flagged due to validation issues.
+
+Filtering, queries, and status logic must be handled inside this module.
+
+3. EXTEND SAME INVOICE SYSTEM TO JOB WORK → LABOUR COST
+
+Take the entire invoice logic and architecture used in the Purchase → Invoices system and implement it inside:
+
+Job Work
+└── Labour Cost
+
+Structure:
+
+Labour Cost
+├── All
+├── Pending
+└── Needs Review
+
+The backend logic must remain identical.
+
+Reuse existing systems:
+
+OCR invoice extraction
+
+Vendor detection
+
+Invoice parsing
+
+GST extraction
+
+Validation checks
+
+Status tagging
+
+Review flagging
+
+File attachment storage
+
+Manual override edits
+
+This must use the same invoice engine, not a separate implementation.
+
+4. LABOUR COST SUMMARY METRICS
+
+Add summary cards at the top of the Job Work → Labour Cost page.
+
+Replace existing metrics with:
+
+Total Labour Charge Payable
+
+Definition:
+Sum of all labour invoices approved and pending payment.
+
+Upcoming Labour Charges
+
+Definition:
+Labour invoices recorded but not yet due.
+
+Discrepancies
+
+Definition:
+Invoices flagged due to validation issues including:
+
+Rate per kg mismatch
+
+GST mismatch
+
+Vendor mismatch
+
+OCR extraction uncertainty
+
+Manual review flag
+
+These must appear as summary cards above the invoice list.
+
+5. ADD SAME SUMMARY STRUCTURE TO PURCHASE → INVOICES
+
+The Purchase → Invoices page must show the same style of summary cards.
+
+Cards:
+
+Total Payable
+
+Approved purchase invoices pending payment.
+
+Upcoming
+
+Invoices recorded but not yet due.
+
+Discrepancies
+
+Invoices flagged for review due to:
+
+GST mismatch
+
+Quantity mismatch
+
+Purchase order mismatch
+
+OCR confidence issues
+
+Cards must appear above the tab navigation.
+
+6. UNIFIED UI LAYOUT
+
+Both modules must follow identical UI hierarchy.
+
+Layout:
+
+Top section
+Summary cards (3)
+
+Second section
+Tab navigation
+
+All | Pending | Needs Review
+
+Third section
+Invoice list / table
+
+Example UI Structure
+
+SUMMARY
+
+[ Total Payable ] [ Upcoming ] [ Discrepancies ]
+
+TABS
+
+All | Pending | Needs Review
+
+TABLE
+
+Vendor
+Invoice No
+Invoice Date
+Amount
+GST %
+Status
+Actions
+
+Actions may include:
+
+View
+Edit
+Approve
+Flag Review
+Pay
+
+7. SHARED INVOICE ENGINE (CRITICAL)
+
+Both modules must use the same shared components.
+
+Implement reusable architecture for:
+
+OCR extraction engine
+Invoice parsing logic
+GST recalculation
+Invoice validation rules
+Status tagging
+Review flagging
+Vendor matching
+Attachment storage
+Manual edit overrides
+
+Do not duplicate code.
+
+Use shared service modules such as:
+
+InvoiceParserService
+OCRProcessingService
+GSTCalculationService
+InvoiceValidationService
+AttachmentStorageService
+
+Both Purchase and Job Work must consume these services.
+
+8. STATUS SYSTEM
+
+Each invoice must have a status state machine.
+
+Possible statuses:
+
+Draft
+Needs Review
+Approved
+Pending Payment
+Paid
+
+Status transitions must be logged.
+
+9. DATABASE ARCHITECTURE
+
+Invoices must support module tagging.
+
+Example fields:
+
+invoice_id
+module_type (Purchase / JobWork)
+vendor_id
+invoice_number
+invoice_date
+amount_basic
+gst_percentage
+gst_amount
+total_amount
+status
+review_flag
+attachment_url
+created_at
+updated_at
+
+Labour invoices must include additional fields:
+
+material_received_kg
+rate_per_kg
+calculated_labour_amount
+
+10. PERFORMANCE REQUIREMENTS
+
+System must support:
+
+High OCR throughput
+Large invoice volumes
+Vendor aggregation queries
+Fast tab filtering
+
+Pagination required for invoice lists.
+
+11. OUTPUT EXPECTED
+
+Generate implementation for:
+
+Refactored invoice architecture
+
+Shared invoice engine
+
+Purchase invoice module
+
+Job Work labour invoice module
+
+Summary metric queries
+
+Tab filtering logic
+
+OCR integration
+
+Database schema
+
+API endpoints
+
+UI layout for both sections
+
+Deliver production-ready modular architecture preventing duplicated invoice logic.
