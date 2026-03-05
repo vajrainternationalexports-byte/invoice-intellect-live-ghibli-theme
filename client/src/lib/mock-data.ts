@@ -91,13 +91,31 @@ export const mockData = {
       vehicleNo: "WB11C-1234",
       weight: 1250,
       rate: 10,
-      basic: 12500,
+      basic: 10593.22,
       gstRate: 18,
-      gstAmount: 2250,
-      total: 14750,
-      tds: 250,
-      payable: 14500,
-      status: "pending"
+      gstAmount: 1906.78,
+      total: 12500,
+      tds: 211.86,
+      payable: 12288.14,
+      status: "pending",
+      gstPercent: "18"
+    },
+    {
+      id: "L-102",
+      vendor: "Bharat Industrial",
+      invNo: "INV/LB/002",
+      date: "2024-03-02",
+      vehicleNo: "WB11C-5678",
+      weight: 840,
+      rate: 10,
+      basic: 7118.64,
+      gstRate: 18,
+      gstAmount: 1281.36,
+      total: 8400,
+      tds: 142.37,
+      payable: 8257.63,
+      status: "needs_review",
+      gstPercent: "18"
     }
   ],
   purchaseOrders: [

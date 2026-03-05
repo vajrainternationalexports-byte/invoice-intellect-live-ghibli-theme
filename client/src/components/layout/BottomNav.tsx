@@ -7,7 +7,6 @@ export function BottomNav() {
 
   const tabs = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Invoices", href: "/invoices", icon: ReceiptText },
     { name: "Reconciliation", href: "/reconciliation", icon: ArrowRightLeft },
     { name: "Vendors", href: "/vendors", icon: Building2 },
   ];

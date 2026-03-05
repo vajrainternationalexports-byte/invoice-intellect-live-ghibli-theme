@@ -31,6 +31,7 @@ import { format } from "date-fns";
 export default function JobWork() {
   const [activeTab, setActiveTab] = useState<'incoming' | 'labour'>('incoming');
   const [subTab, setSubTab] = useState<'vendors' | 'challans'>('vendors');
+  const [labourFilter, setLabourFilter] = useState<'all' | 'pending' | 'needs_review'>('all');
   const [searchQuery, setSearchQuery] = useState("");
   const [entries, setEntries] = useState(mockData.jobWorkEntries);
   const [labourInvoices, setLabourInvoices] = useState(mockData.labourInvoices);
@@ -98,6 +99,15 @@ export default function JobWork() {
     );
   }, [entries, searchQuery]);
 
+  const filteredLabourInvoices = useMemo(() => {
+    return labourInvoices.filter(inv => {
+      const matchesSearch = inv.invNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           inv.vendor.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFilter = labourFilter === 'all' || inv.status === labourFilter;
+      return matchesSearch && matchesFilter;
+    });
+  }, [labourInvoices, searchQuery, labourFilter]);
+
   // Labour Calculations - Follow PROMPT Logic word-for-word
   const labourCalculations = useMemo(() => {
     const total = parseFloat(labourForm.total) || 0;
@@ -154,15 +164,33 @@ export default function JobWork() {
       toast.error("Invoice No and Total Amount are mandatory");
       return;
     }
+    
+    // Determine status based on some mock logic or default to pending
+    const status = parseFloat(labourForm.total) > 15000 ? "needs_review" : "pending";
+    
     const newInv = {
       id: "L-" + Date.now(),
       ...labourForm,
       ...labourCalculations,
-      status: "pending"
+      status: status
     };
     setLabourInvoices([newInv as any, ...labourInvoices]);
     setIsLabourDrawerOpen(false);
-    toast.success("Labour Invoice Saved");
+    toast.success(`Labour Invoice Saved (${status.replace('_', ' ')})`);
+  };
+
+  const handleLabourApprove = (id: string) => {
+    setLabourInvoices(prev => prev.map(inv => 
+      inv.id === id ? { ...inv, status: 'pending' } : inv
+    ));
+    toast.success("Labour invoice approved");
+  };
+
+  const handleLabourPay = (id: string) => {
+    setLabourInvoices(prev => prev.map(inv => 
+      inv.id === id ? { ...inv, status: 'processed' } : inv
+    ));
+    toast.success("Payment initiated");
   };
 
   const handleLabourScan = () => {
@@ -297,80 +325,109 @@ export default function JobWork() {
             </div>
 
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-              <button className="flex-1 py-1.5 text-[10px] font-bold rounded-lg bg-white shadow-sm">All</button>
-              <button className="flex-1 py-1.5 text-[10px] font-bold rounded-lg text-gray-500">Pending</button>
-              <button className="flex-1 py-1.5 text-[10px] font-bold rounded-lg text-gray-500">Needs Review</button>
+              <button 
+                onClick={() => setLabourFilter('all')}
+                className={cn("flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all", labourFilter === 'all' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
+              >
+                All
+              </button>
+              <button 
+                onClick={() => setLabourFilter('pending')}
+                className={cn("flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all", labourFilter === 'pending' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
+              >
+                Pending
+              </button>
+              <button 
+                onClick={() => setLabourFilter('needs_review')}
+                className={cn("flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all", labourFilter === 'needs_review' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
+              >
+                Needs Review
+              </button>
             </div>
 
             <div className="space-y-3">
-               <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Vendor Summary</h3>
-               {mockData.vendors.map((v: any, i) => (
-                 <div key={i} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm space-y-4">
+               <div className="flex justify-between items-center px-1">
+                  <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Invoices</h3>
+                  <span className="text-[10px] font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-full">{filteredLabourInvoices.length} Found</span>
+               </div>
+               
+               {filteredLabourInvoices.map((inv: any) => (
+                 <div key={inv.id} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm space-y-4">
                     <div className="flex justify-between items-start">
                        <div>
                          <div className="flex items-center gap-2 mb-1">
-                           <h4 className="font-bold text-gray-900 text-sm">{v.name}</h4>
+                           <h4 className="font-bold text-gray-900 text-sm">{inv.vendor}</h4>
                            <div className="h-4 w-4 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><path d="M20 6L9 17L4 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
                            </div>
                          </div>
-                         <p className="text-[10px] font-medium text-gray-400">GSTIN: {v.gstin}</p>
+                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-tight">GSTIN: {mockData.vendors.find(v => v.name === inv.vendor)?.gstin || "Pending"}</p>
                        </div>
                        <div className="text-right">
-                         <p className="text-lg font-black text-gray-900">₹{v.labourOutstanding.toLocaleString('en-IN')}</p>
-                         <p className="text-[9px] font-bold text-amber-500 flex items-center justify-end gap-1 uppercase">
-                           <History size={10} /> Pending
+                         <p className="text-lg font-black text-gray-900">₹{parseFloat(inv.total).toLocaleString('en-IN')}</p>
+                         <p className={cn(
+                           "text-[9px] font-bold flex items-center justify-end gap-1 uppercase",
+                           inv.status === 'pending' ? "text-amber-500" : 
+                           inv.status === 'needs_review' ? "text-rose-500" : "text-emerald-500"
+                         )}>
+                           <History size={10} /> {inv.status.replace('_', ' ')}
                          </p>
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                       <button className="flex-1 bg-primary text-white py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-primary/20">
-                          <CreditCard size={14} /> Pay
-                       </button>
-                       <button className="flex-1 bg-gray-50 text-gray-900 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all">
-                          <History size={14} /> Schedule
-                       </button>
+                    <div className="flex gap-2">
+                       {inv.status === 'needs_review' && (
+                         <button onClick={() => handleLabourApprove(inv.id)} className="flex-1 bg-emerald-500 text-white py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-emerald-200">
+                            <Check size={14} /> Approve
+                         </button>
+                       )}
+                       {inv.status === 'pending' && (
+                         <>
+                           <button onClick={() => handleLabourPay(inv.id)} className="flex-1 bg-primary text-white py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-primary/20">
+                              <CreditCard size={14} /> Pay
+                           </button>
+                           <button className="flex-1 bg-gray-50 text-gray-900 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all">
+                              <History size={14} /> Schedule
+                           </button>
+                         </>
+                       )}
+                       {inv.status === 'processed' && (
+                         <div className="flex-1 py-2 text-center text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-xl">
+                           Processed Successfully
+                         </div>
+                       )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 text-center">
-                       <div>
+                       <div className="text-center">
                           <p className="text-[7px] text-gray-400 font-bold uppercase">Total Invoiced</p>
-                          <p className="text-[10px] font-black text-gray-700">₹{v.labourOutstanding.toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
+                          <p className="text-[10px] font-black text-gray-700">₹{parseFloat(inv.total).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
                        </div>
-                       <div>
-                          <p className="text-[7px] text-gray-400 font-bold uppercase">TDS Deducted</p>
-                          <p className="text-[10px] font-black text-rose-500">₹{((v.labourOutstanding / 1.18) * 0.02).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
+                       <div className="text-center">
+                          <p className="text-[7px] text-gray-400 font-bold uppercase">TDS (2%)</p>
+                          <p className="text-[10px] font-black text-rose-500">₹{parseFloat(inv.tds).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
                        </div>
-                       <div>
+                       <div className="text-center">
                           <p className="text-[7px] text-gray-400 font-bold uppercase">Outstanding</p>
-                          <p className="text-[10px] font-black text-emerald-600">₹{(v.labourOutstanding - ((v.labourOutstanding / 1.18) * 0.02)).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
+                          <p className="text-[10px] font-black text-emerald-600">₹{parseFloat(inv.payable).toLocaleString('en-IN', {maximumFractionDigits: 0})}</p>
                        </div>
                     </div>
                  </div>
                ))}
+
+               {filteredLabourInvoices.length === 0 && (
+                 <div className="py-20 text-center">
+                    <div className="h-16 w-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                       <Search className="text-gray-300" size={24} />
+                    </div>
+                    <p className="text-sm font-bold text-gray-400">No invoices matching filters</p>
+                 </div>
+               )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Sticky Bottom Summary Bar */}
-      <div className="fixed bottom-20 left-4 right-4 bg-white/80 backdrop-blur-xl border border-gray-100 rounded-2xl p-3 flex justify-between items-center shadow-lg z-30">
-        <div className="text-center">
-          <p className="text-[8px] text-gray-400 font-bold uppercase">Total Wt</p>
-          <p className="text-xs font-black text-gray-900">{totals.ourWt} KG</p>
-        </div>
-        <div className="h-6 w-px bg-gray-100"></div>
-        <div className="text-center">
-          <p className="text-[8px] text-gray-400 font-bold uppercase">Consumed</p>
-          <p className="text-xs font-black text-rose-600">{totals.consumed.toFixed(1)}</p>
-        </div>
-        <div className="h-6 w-px bg-gray-100"></div>
-        <div className="text-center">
-          <p className="text-[8px] text-gray-400 font-bold uppercase">Balance</p>
-          <p className="text-xs font-black text-primary">{(totals.consumed - totals.received).toFixed(1)}</p>
-        </div>
-      </div>
 
       {/* Labour Entry Drawer */}
       <Drawer open={isLabourDrawerOpen} onOpenChange={setIsLabourDrawerOpen}>
