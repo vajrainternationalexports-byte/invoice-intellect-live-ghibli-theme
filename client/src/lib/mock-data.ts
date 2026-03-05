@@ -47,8 +47,8 @@ export const mockData = {
     }
   ],
   vendors: [
-    { id: "V-001", name: "Acme India Pvt Ltd.", labourOutstanding: 12500, totalPaid: 45000 },
-    { id: "V-002", name: "Bharat Industrial", labourOutstanding: 8400, totalPaid: 22000 }
+    { id: "V-001", name: "Acme India Pvt Ltd.", gstin: "27GVPPS1234A1Z5", labourOutstanding: 12500, totalPaid: 45000 },
+    { id: "V-002", name: "Bharat Industrial", gstin: "09AAACB1234P1Z2", labourOutstanding: 8400, totalPaid: 22000 }
   ],
   jobWorkEntries: [
     {

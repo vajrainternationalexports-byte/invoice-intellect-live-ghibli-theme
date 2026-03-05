@@ -10,6 +10,7 @@ import {
   X, 
   Trash2, 
   Save,
+  Check,
   ArrowDownLeft,
   ArrowUpRight,
   Filter,
@@ -361,7 +362,7 @@ export default function JobWork() {
                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><path d="M20 6L9 17L4 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
                            </div>
                          </div>
-                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-tight">GSTIN: {mockData.vendors.find(v => v.name === inv.vendor)?.gstin || "Pending"}</p>
+                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-tight">GSTIN: {(mockData.vendors.find(v => v.name === inv.vendor) as any)?.gstin || "Pending"}</p>
                        </div>
                        <div className="text-right">
                          <p className="text-lg font-black text-gray-900">₹{parseFloat(inv.total).toLocaleString('en-IN')}</p>
