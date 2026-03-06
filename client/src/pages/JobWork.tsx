@@ -272,24 +272,64 @@ export default function JobWork() {
 
             {subTab === 'vendors' ? (
               vendorBalances.map((v, i) => (
-                <div key={i} onClick={() => setSelectedVendor(v)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm active:scale-[0.98] transition-all flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><Building2 size={20} /></div>
-                    <div><h3 className="font-bold text-gray-900 text-sm">{v.name}</h3><p className="text-[10px] text-gray-400">Balance: {(v.consumed - v.received).toFixed(1)} KG</p></div>
+                <div key={i} onClick={() => setSelectedVendor(v)} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm active:scale-[0.98] transition-all space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><Building2 size={20} /></div>
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-sm">{v.name}</h3>
+                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-tight">Net Zinc: {(v.consumed - v.received).toFixed(2)} KG</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={18} className="text-gray-300" />
                   </div>
-                  <ChevronRight size={18} className="text-gray-300" />
+                  
+                  <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 text-center">
+                    <div>
+                      <p className="text-[7px] text-gray-400 font-bold uppercase">Total Wt</p>
+                      <p className="text-[10px] font-black text-gray-700">{v.totalWt.toLocaleString()} KG</p>
+                    </div>
+                    <div>
+                      <p className="text-[7px] text-gray-400 font-bold uppercase">Consumed</p>
+                      <p className="text-[10px] font-black text-rose-500">{v.consumed.toFixed(2)} KG</p>
+                    </div>
+                    <div>
+                      <p className="text-[7px] text-gray-400 font-bold uppercase">Received</p>
+                      <p className="text-[10px] font-black text-emerald-600">{v.received.toFixed(2)} KG</p>
+                    </div>
+                  </div>
                 </div>
               ))
             ) : (
               filteredChallans.map((e) => (
-                <div key={e.id} onClick={() => setSelectedEntry(e)} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm active:scale-[0.98] transition-all flex justify-between items-center">
-                  <div>
-                    <span className="text-[9px] font-black text-primary bg-primary/5 px-1.5 py-0.5 rounded uppercase">{e.challan}</span>
-                    <h4 className="text-xs font-bold text-gray-900 mt-1">{e.vendor}</h4>
-                    <p className="text-[9px] text-gray-400 uppercase font-bold">{e.date}</p>
+                <div key={e.id} onClick={() => setSelectedEntry(e)} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm active:scale-[0.98] transition-all space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[9px] font-black text-primary bg-primary/5 px-1.5 py-0.5 rounded uppercase tracking-wider">{e.challan}</span>
+                      <h4 className="text-sm font-bold text-gray-900 mt-2">{e.vendor}</h4>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight mt-0.5">{e.date} • {e.lorryNo}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black text-gray-900">{e.items.reduce((s:any,i:any)=>s+i.zinc, 0).toFixed(2)} KG</p>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Net Zinc</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-gray-900">{e.items.reduce((s,i)=>s+i.zinc, 0).toFixed(1)} KG</p>
+
+                  <div className="space-y-2">
+                    {e.items.map((item: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center text-[10px] py-1 border-b border-gray-50 last:border-0">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-gray-700">{item.material}</span>
+                          <span className="text-[8px] text-gray-400">{item.thick ? `${item.thick}mm` : ''} {item.pcs && item.pcs !== 'N/A' ? `• ${item.pcs} Pcs` : ''}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className={cn("font-black", item.zinc > 0 ? "text-rose-500" : "text-emerald-600")}>
+                            {item.zinc > 0 ? '+' : ''}{item.zinc.toFixed(2)}
+                          </span>
+                          <span className="text-[8px] text-gray-400 block">{item.rate ? `at ${item.rate}%` : 'Received'}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))
