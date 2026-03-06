@@ -70,6 +70,8 @@ export default function JobWork() {
     return entries.reduce((acc, entry) => {
       entry.items.forEach((item: any) => {
         acc.ourWt += parseFloat(item.ourWt) || 0;
+        // Spreadsheet logic: Zinc is pre-calculated per item in mock-data
+        // We just sum them here. Positive = Consumed, Negative = Received
         if (item.zinc > 0) acc.consumed += item.zinc;
         else acc.received += Math.abs(item.zinc);
       });
@@ -253,17 +255,17 @@ export default function JobWork() {
                   <h2 className="text-3xl font-black">{(totals.consumed - totals.received).toFixed(2)} KG</h2>
                 </div>
                 <div className={cn("px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider", (totals.consumed - totals.received) > 0 ? "bg-rose-500/20 text-rose-300" : "bg-emerald-500/20 text-emerald-300")}>
-                  {(totals.consumed - totals.received) > 0 ? "Surplus Due" : "Excess Held"}
+                  {(totals.consumed - totals.received) > 0 ? "Receivable" : "Payable"}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
                 <div>
-                  <p className="text-[8px] font-bold uppercase opacity-40">Material Sent</p>
-                  <p className="text-sm font-black">{(totals.consumed/1000).toFixed(3)} MT</p>
+                  <p className="text-[8px] font-bold uppercase opacity-40">Total Incoming (OUR.Wt)</p>
+                  <p className="text-sm font-black">{totals.ourWt.toLocaleString()} KG</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[8px] font-bold uppercase opacity-40">Material Received</p>
-                  <p className="text-sm font-black">{(totals.received/1000).toFixed(3)} MT</p>
+                  <p className="text-[8px] font-bold uppercase opacity-40">Zinc Consumed</p>
+                  <p className="text-sm font-black">{totals.consumed.toFixed(2)} KG</p>
                 </div>
               </div>
             </div>

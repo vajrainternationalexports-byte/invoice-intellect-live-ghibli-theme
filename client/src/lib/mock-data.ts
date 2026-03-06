@@ -80,6 +80,61 @@ export const mockData = {
       items: [
         { material: "Zinc Received", thick: 0, pcs: 0, partyWt: 0, ourWt: 0, rate: 0, zinc: -1003 }
       ]
+    },
+    {
+      id: 4,
+      challan: "J/100",
+      date: "2025-12-06",
+      lorryNo: "WB11C-6257",
+      vendor: "Acme India Pvt Ltd.",
+      items: [
+        { material: "Flat 25x3", thick: 3, pcs: 0, partyWt: 2330, ourWt: 12340, rate: 7, zinc: 163.1 },
+        { material: "Flat 50x6", thick: 6, pcs: 0, partyWt: 6430, ourWt: 0, rate: 3.6, zinc: 231.48 },
+        { material: "Flat 75x10", thick: 10, pcs: 0, partyWt: 3570, ourWt: 0, rate: 2.5, zinc: 89.25 }
+      ]
+    },
+    {
+      id: 5,
+      challan: "J/105",
+      date: "2025-12-22",
+      lorryNo: "WB11E-3832",
+      vendor: "Acme India Pvt Ltd.",
+      items: [
+        { material: "Zinc Received", thick: 0, pcs: 0, partyWt: 0, ourWt: 0, rate: 0, zinc: -1200 }
+      ]
+    },
+    {
+      id: 6,
+      challan: "J/114",
+      date: "2026-01-05",
+      lorryNo: "WB11C-6257",
+      vendor: "Acme India Pvt Ltd.",
+      items: [
+        { material: "Flat 75x10", thick: 10, pcs: 0, partyWt: 3900, ourWt: 11800, rate: 3, zinc: 117 },
+        { material: "Flat 65x8", thick: 8, pcs: 0, partyWt: 7920, ourWt: 0, rate: 3, zinc: 237.6 }
+      ]
+    },
+    {
+      id: 7,
+      challan: "J/127",
+      date: "2026-02-06",
+      lorryNo: "WB11C-8500",
+      vendor: "Acme India Pvt Ltd.",
+      items: [
+        { material: "Flat 65x8", thick: 8, pcs: 0, partyWt: 9270, ourWt: 12420, rate: 3, zinc: 278.1 },
+        { material: "Flat 50x8", thick: 8, pcs: 0, partyWt: 3130, ourWt: 0, rate: 3, zinc: 93.9 }
+      ]
+    },
+    {
+      id: 8,
+      challan: "J/128",
+      date: "2026-02-07",
+      lorryNo: "WB11C-8500",
+      vendor: "Acme India Pvt Ltd.",
+      items: [
+        { material: "Flat 50x6", thick: 6, pcs: 0, partyWt: 2500, ourWt: 10640, rate: 3.6, zinc: 90 },
+        { material: "Flat 25x6", thick: 6, pcs: 0, partyWt: 8150, ourWt: 0, rate: 3.6, zinc: 293.4 }
+      ]
     }
   ],
   labourInvoices: [
