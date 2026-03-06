@@ -258,6 +258,9 @@ export default function JobWork() {
                   {(totals.consumed - totals.received) > 0 ? "Receivable" : "Payable"}
                 </div>
               </div>
+              <div className="space-y-1 mb-4 opacity-40">
+                <p className="text-[8px] font-bold uppercase tracking-tighter italic">Formula: Σ (Our Wt × Rate %) - Σ (Zinc Received)</p>
+              </div>
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
                 <div>
                   <p className="text-[8px] font-bold uppercase opacity-40">Total Incoming (OUR.Wt)</p>
@@ -593,6 +596,9 @@ export default function JobWork() {
                 <DrawerClose className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></DrawerClose>
               </div>
               <DrawerTitle className="text-xl font-bold">New Incoming Entry</DrawerTitle>
+              <DrawerDescription className="text-xs font-medium text-gray-500 italic mt-1">
+                Formula: (Our Wt × Rate %) / 100 = Zinc Consumed
+              </DrawerDescription>
             </DrawerHeader>
 
             <div className="space-y-4">
