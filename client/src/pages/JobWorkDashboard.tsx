@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { mockData } from "@/lib/mock-data";
 import { Link } from "wouter";
 import { ArrowLeft, FileDown, Activity, ChevronRight, Scale, TrendingDown, Layers } from "lucide-react";
 import { downloadExcel } from "@/lib/excel-export";

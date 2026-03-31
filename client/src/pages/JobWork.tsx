@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { mockData } from "@/lib/mock-data";
 import { 
   Plus, 
   Search, 
@@ -41,9 +40,9 @@ export default function JobWork() {
   const [subTab, setSubTab] = useState<'vendors' | 'challans'>('vendors');
   const [labourFilter, setLabourFilter] = useState<'all' | 'pending' | 'needs_review'>('all');
   const [searchQuery, setSearchQuery] = useState("");
-  const [entries, setEntries] = useState(mockData.jobWorkEntries);
+  const [entries, setEntries] = useState<any[]>([]);
   const [draftEntries, setDraftEntries] = useState<any[]>([]);
-  const [labourInvoices, setLabourInvoices] = useState(mockData.labourInvoices);
+  const [labourInvoices, setLabourInvoices] = useState<any[]>([]);
   const [draftLabourInvoices, setDraftLabourInvoices] = useState<any[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
   const [selectedEntry, setSelectedEntry] = useState<any>(null);
@@ -53,12 +52,40 @@ export default function JobWork() {
   const [showScanDrawer, setShowScanDrawer] = useState(false);
   const [scanDocType, setScanDocType] = useState<"ZINC_STATEMENT_IES" | "LABOUR_INVOICE" | "AUTO_DETECT">("AUTO_DETECT");
 
+  // Fetch vendors from API for dropdowns
+  const { data: apiVendors = [] } = useQuery<any[]>({ queryKey: ["/api/vendors"] });
+
+  // Fetch job work entries and labour invoices from API
+  const { data: apiEntries = [] } = useQuery<any[]>({ queryKey: ["/api/job-work"] });
+  const { data: apiLabourInvoices = [] } = useQuery<any[]>({ queryKey: ["/api/labour-invoices"] });
+
+  // Sync API data into local state on load (only once, local state handles new saves)
+  const entriesInitialized = useRef(false);
+  if (!entriesInitialized.current && apiEntries.length > 0) {
+    entriesInitialized.current = true;
+    setEntries(apiEntries);
+  }
+  const labourInitialized = useRef(false);
+  if (!labourInitialized.current && apiLabourInvoices.length > 0) {
+    labourInitialized.current = true;
+    setLabourInvoices(apiLabourInvoices);
+  }
+
+  // Compute labour totals from live data
+  const labourTotals = useMemo(() => {
+    const all = [...labourInvoices, ...draftLabourInvoices];
+    return {
+      outstanding: all.reduce((s, i) => s + (parseFloat(i.netPayable) || parseFloat(i.invoiceTotal) || 0), 0),
+      tds: all.reduce((s, i) => s + (parseFloat(i.tdsAmount) || 0), 0),
+    };
+  }, [labourInvoices, draftLabourInvoices]);
+
   // Form States
   const [formHeader, setFormHeader] = useState({
     challan: "",
     date: format(new Date(), "yyyy-MM-dd"),
     lorryNo: "",
-    vendor: mockData.vendors[0].name
+    vendor: ""
   });
   const [formItems, setFormItems] = useState<any[]>([
     { material: "", thick: "", pcs: "", partyWt: "", ourWt: "", rate: "", zinc: 0 }
@@ -66,7 +93,7 @@ export default function JobWork() {
 
   // Labour Form State
   const [labourForm, setLabourForm] = useState({
-    vendor: mockData.vendors[0].name,
+    vendor: "",
     invNo: "",
     date: format(new Date(), "yyyy-MM-dd"),
     vehicleNo: "",
@@ -250,7 +277,7 @@ export default function JobWork() {
         weight: "1250",
         rate: "12.40",
         total: randomTotal.toString(),
-        vendor: mockData.vendors[0].name,
+        vendor: apiVendors[0]?.name ?? "",
         date: format(new Date(), "yyyy-MM-dd"),
         gstPercent: "18"
       });
@@ -425,18 +452,18 @@ export default function JobWork() {
                <div className="flex justify-between items-start mb-4">
                   <div className="space-y-0.5">
                     <p className="text-[9px] font-bold uppercase tracking-widest opacity-60">Total Labour Outstanding</p>
-                    <h2 className="text-3xl font-black">₹{mockData.stats.labourChargesPayable.toLocaleString('en-IN')}</h2>
+                    <h2 className="text-3xl font-black">₹{labourTotals.outstanding.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h2>
                   </div>
                   <CreditCard size={24} className="opacity-40" />
                </div>
                <div className="flex gap-3">
                   <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex-1">
-                    <p className="text-[8px] font-bold uppercase opacity-60">Total Paid</p>
-                    <p className="text-xs font-black">₹45,000</p>
+                    <p className="text-[8px] font-bold uppercase opacity-60">Invoices</p>
+                    <p className="text-xs font-black">{labourInvoices.length + draftLabourInvoices.length}</p>
                   </div>
                   <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex-1 text-right">
                     <p className="text-[8px] font-bold uppercase opacity-60">TDS Deducted</p>
-                    <p className="text-xs font-black">₹8,400</p>
+                    <p className="text-xs font-black">₹{labourTotals.tds.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                   </div>
                </div>
             </div>
@@ -487,7 +514,7 @@ export default function JobWork() {
                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><path d="M20 6L9 17L4 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
                            </div>
                          </div>
-                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-tight">GSTIN: {(mockData.vendors.find(v => v.name === inv.vendor) as any)?.gstin || "Pending"}</p>
+                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-tight">GSTIN: {(apiVendors.find((v: any) => v.name === inv.vendor || v.name === inv.galvanizerName) as any)?.gstin || "Pending"}</p>
                        </div>
                        <div className="text-right">
                          <p className="text-lg font-black text-gray-900">₹{parseFloat(inv.total).toLocaleString('en-IN')}</p>
@@ -580,7 +607,8 @@ export default function JobWork() {
                       onChange={(e) => setLabourForm({...labourForm, vendor: e.target.value})}
                       className="h-11 w-full rounded-xl bg-gray-50 border-0 px-3 text-sm font-bold"
                     >
-                      {mockData.vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                      {apiVendors.length === 0 && <option value="">No vendors — add via Vendors tab</option>}
+                      {apiVendors.map((v: any) => <option key={v.id} value={v.name}>{v.name}</option>)}
                     </select>
                   </div>
 
@@ -706,7 +734,8 @@ export default function JobWork() {
                   onChange={(e) => setFormHeader({...formHeader, vendor: e.target.value})}
                   className="h-11 w-full rounded-xl bg-gray-50 border-0 px-3 text-sm font-bold"
                 >
-                  {mockData.vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                  {apiVendors.length === 0 && <option value="">No vendors yet</option>}
+                  {apiVendors.map((v: any) => <option key={v.id} value={v.name}>{v.name}</option>)}
                 </select>
               </div>
 
@@ -799,16 +828,16 @@ export default function JobWork() {
                       weight: data.line_items?.[0]?.weight_kgs?.toString() || "1250",
                       rate: data.line_items?.[0]?.rate_per_kg?.toString() || "12.40",
                       total: data.totals?.invoice_total?.toString() || "15500",
-                      vendor: data.galvanizer?.name || mockData.vendors[0].name,
+                      vendor: data.galvanizer?.name || (apiVendors[0]?.name ?? ""),
                       date: data.invoice_date || format(new Date(), "yyyy-MM-dd"),
                     });
                     setIsLabourDrawerOpen(true);
                   } else {
                     setFormHeader({
-                      challan: data.transactions?.[0]?.party_challan_no || "J/128",
+                      challan: data.transactions?.[0]?.party_challan_no || "",
                       date: data.period_to || format(new Date(), "yyyy-MM-dd"),
-                      lorryNo: "WB11C-8888",
-                      vendor: "Acme India Pvt Ltd."
+                      lorryNo: "",
+                      vendor: data.galvanizer?.name || data.party?.name || (apiVendors[0]?.name ?? ""),
                     });
                     if (data.transactions && data.transactions.length > 0) {
                        // Filter out false positive header rows where everything is 0
