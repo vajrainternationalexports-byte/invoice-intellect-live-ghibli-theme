@@ -40,7 +40,9 @@ export default function JobWork() {
   const [labourFilter, setLabourFilter] = useState<'all' | 'pending' | 'needs_review'>('all');
   const [searchQuery, setSearchQuery] = useState("");
   const [entries, setEntries] = useState(mockData.jobWorkEntries);
+  const [draftEntries, setDraftEntries] = useState<any[]>([]);
   const [labourInvoices, setLabourInvoices] = useState(mockData.labourInvoices);
+  const [draftLabourInvoices, setDraftLabourInvoices] = useState<any[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
   const [selectedEntry, setSelectedEntry] = useState<any>(null);
   const [isEntryDrawerOpen, setIsEntryDrawerOpen] = useState(false);
@@ -102,12 +104,13 @@ export default function JobWork() {
   }, [entries]);
 
   const filteredChallans = useMemo(() => {
-    return entries.filter(e => 
+    const allChallans = [...draftEntries, ...entries];
+    return allChallans.filter(e => 
       e.challan.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.lorryNo.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [entries, searchQuery]);
+  }, [entries, draftEntries, searchQuery]);
 
   const filteredLabourInvoices = useMemo(() => {
     return labourInvoices.filter(inv => {
@@ -144,14 +147,30 @@ export default function JobWork() {
       toast.error("Challan No is mandatory");
       return;
     }
+    
+    // Filter out rows that are entirely zero or empty to prevent false positives from OCR
+    const validItems = formItems.filter(item => 
+      parseFloat(item.ourWt) > 0 || parseFloat(item.rate) > 0 || parseFloat(item.zinc) !== 0 || item.material.trim() !== ""
+    );
+
+    if (validItems.length === 0) {
+      toast.error("At least one valid item is required");
+      return;
+    }
+
     const newEntry = {
       id: Date.now(),
       ...formHeader,
-      items: formItems
+      items: validItems,
+      isDraft: false
     };
+    
+    // If we were editing a draft, remove it from drafts and add to main entries
+    setDraftEntries(prev => prev.filter(d => d.id !== newEntry.id));
     setEntries([newEntry, ...entries]);
+    
     setIsEntryDrawerOpen(false);
-    toast.success("Job Work Entry Saved");
+    toast.success("Job Work Entry Saved & Confirmed");
   };
 
   const handleScan = () => {
@@ -521,8 +540,8 @@ export default function JobWork() {
 
       {/* Labour Entry Drawer */}
       <Drawer open={isLabourDrawerOpen} onOpenChange={setIsLabourDrawerOpen}>
-        <DrawerContent className="max-h-[92dvh] bg-white rounded-t-[2.5rem]">
-          <div className="p-6 space-y-6 overflow-y-auto no-scrollbar pb-10">
+        <DrawerContent className="max-h-[92dvh] bg-white rounded-t-[2.5rem] flex flex-col">
+          <div className="p-6 space-y-6 overflow-y-auto no-scrollbar flex-1">
             <DrawerHeader className="p-0 text-left">
               <div className="flex justify-between items-center mb-4">
                 <button onClick={handleLabourScan} className="h-10 px-3 bg-emerald-50 text-emerald-600 rounded-xl flex items-center gap-2 text-xs font-bold transition-all active:scale-95">
@@ -617,19 +636,20 @@ export default function JobWork() {
                      </div>
                   </div>
                </div>
-
-               <button onClick={handleLabourSave} className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 transition-all active:scale-95">
-                  <Save size={20} /> Confirm & Save Labour Invoice
-               </button>
             </div>
+          </div>
+          <div className="p-4 bg-white border-t border-gray-100 pb-[calc(env(safe-area-inset-bottom)+16px)] mt-auto z-10">
+             <button onClick={handleLabourSave} className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 transition-all active:scale-95">
+                <Save size={20} /> Confirm & Save Labour Invoice
+             </button>
           </div>
         </DrawerContent>
       </Drawer>
 
       {/* Entry Drawer (unchanged structure but with Terminology updates) */}
       <Drawer open={isEntryDrawerOpen} onOpenChange={setIsEntryDrawerOpen}>
-        <DrawerContent className="max-h-[92dvh] bg-white rounded-t-[2.5rem]">
-           <div className="p-6 space-y-6 overflow-y-auto no-scrollbar pb-10">
+        <DrawerContent className="max-h-[92dvh] bg-white rounded-t-[2.5rem] flex flex-col">
+           <div className="p-6 space-y-6 overflow-y-auto no-scrollbar flex-1">
             <DrawerHeader className="p-0 text-left">
               <div className="flex justify-between items-center mb-4">
                 <div className="flex gap-2">
@@ -673,7 +693,7 @@ export default function JobWork() {
                 </select>
               </div>
 
-              <div className="pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-gray-100 pb-4">
                 <div className="flex justify-between items-center mb-3">
                   <Label className="text-[9px] font-black uppercase text-gray-400">Items (Zinc Calc)</Label>
                   <button onClick={() => setFormItems([...formItems, { material: "", thick: "", pcs: "", partyWt: "", ourWt: "", rate: "", zinc: 0 }])} className="text-primary text-[10px] font-bold flex items-center gap-1">
@@ -683,14 +703,14 @@ export default function JobWork() {
                 
                 <div className="space-y-3">
                   {formItems.map((item, idx) => (
-                    <div key={idx} className="bg-gray-50 p-3 rounded-2xl space-y-3 border border-gray-100">
+                    <div key={idx} className="bg-gray-50 p-3 rounded-2xl space-y-3 border border-gray-100 relative group">
                       <div className="flex justify-between items-start">
                         <Input placeholder="Material Description" value={item.material} onChange={(e) => {
                           const newItems = [...formItems];
                           newItems[idx].material = e.target.value;
                           setFormItems(newItems);
                         }} className="h-9 bg-white border-0 text-xs font-bold" />
-                        <button onClick={() => setFormItems(formItems.filter((_, i) => i !== idx))} className="p-2 text-rose-400"><Trash2 size={14} /></button>
+                        <button onClick={() => setFormItems(formItems.filter((_, i) => i !== idx))} className="p-2 text-rose-400 hover:bg-rose-50 rounded-full transition-colors"><Trash2 size={14} /></button>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <Input placeholder="Thick" value={item.thick} onChange={(e) => {
@@ -735,11 +755,12 @@ export default function JobWork() {
                   ))}
                 </div>
               </div>
-
+            </div>
+           </div>
+           <div className="p-4 bg-white border-t border-gray-100 pb-[calc(env(safe-area-inset-bottom)+16px)] mt-auto z-10">
               <button onClick={handleSave} className="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all active:scale-95">
                 <Save size={20} /> Save Entry
               </button>
-            </div>
            </div>
         </DrawerContent>
       </Drawer>
@@ -773,20 +794,28 @@ export default function JobWork() {
                       vendor: "Acme India Pvt Ltd."
                     });
                     if (data.transactions && data.transactions.length > 0) {
-                       setFormItems(data.transactions.map((t: any) => ({
+                       // Filter out false positive header rows where everything is 0
+                       const validTransactions = data.transactions.filter((t: any) => {
+                         const hasWeight = parseFloat(t.weight_kgs) > 0;
+                         const hasZinc = parseFloat(t.zinc_consumed_kgs) > 0 || parseFloat(t.zinc_ingot_received_kgs) > 0;
+                         const hasQty = parseFloat(t.qty_nos) > 0;
+                         return hasWeight || hasZinc || hasQty;
+                       });
+                       
+                       setFormItems(validTransactions.map((t: any) => ({
                          material: t.description || "Material",
                          thick: "",
                          pcs: t.qty_nos?.toString() || "",
                          partyWt: t.weight_kgs?.toString() || "0",
                          ourWt: t.weight_kgs?.toString() || "0",
                          rate: t.zinc_percent?.toString() || "0",
-                         zinc: t.zinc_consumed_kgs || 0
+                         zinc: t.zinc_consumed_kgs || (t.zinc_ingot_received_kgs ? -t.zinc_ingot_received_kgs : 0)
                        })));
                     }
                     setIsEntryDrawerOpen(true);
                   }
                   toast.success(`${scanDocType === 'LABOUR_INVOICE' ? 'Labour Invoice' : 'Zinc Statement'} extracted`);
-                }, 1500);
+                }, 100);
               }}
               onCancel={() => setShowScanDrawer(false)}
             />

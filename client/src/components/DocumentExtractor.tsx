@@ -16,11 +16,9 @@ export function DocumentExtractor({
   const [status, setStatus] = useState<"idle" | "processing" | "success" | "error">("idle");
   const [result, setResult] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFile = async (file: File) => {
     setStatus("processing");
     
     const reader = new FileReader();
@@ -29,8 +27,6 @@ export function DocumentExtractor({
       const mimeType = file.type;
 
       try {
-        // We will try the actual function, but since it lacks an API key in mockup mode,
-        // we'll catch the error and return mock data for visual demonstration
         let response;
         try {
           response = await extractDocumentWithClaude({
@@ -56,8 +52,12 @@ export function DocumentExtractor({
         if (response.success) {
           setStatus("success");
           setResult(response.data);
-          onExtract(response.data);
-          toast.success("Document extracted successfully");
+          
+          // Auto-advance to review screen after 1 second per S2 W
+          setTimeout(() => {
+            onExtract(response.data);
+            toast.success("Document extracted successfully");
+          }, 1000);
         } else {
           setStatus("error");
           toast.error("Failed to extract document");
@@ -68,6 +68,12 @@ export function DocumentExtractor({
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processFile(file);
   };
 
   return (
@@ -84,13 +90,14 @@ export function DocumentExtractor({
       {status === "idle" && (
         <div className="grid grid-cols-2 gap-4">
           <div 
-            onClick={() => toast.info("Camera access not available in mockup")}
+            onClick={() => cameraInputRef.current?.click()}
             className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-gray-500 cursor-pointer active:scale-95 transition-all hover:bg-gray-50 hover:border-gray-300 shadow-sm"
           >
             <div className="h-14 w-14 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center">
               <Camera size={24} />
             </div>
             <span className="font-bold text-sm text-gray-700">Use Camera</span>
+            <span className="text-[10px] text-gray-400 text-center px-2">Take a photo</span>
           </div>
 
           <div 
@@ -100,20 +107,39 @@ export function DocumentExtractor({
             <div className="h-14 w-14 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center">
               <Upload size={24} />
             </div>
-            <span className="font-bold text-sm text-gray-700">Upload File</span>
+            <span className="font-bold text-sm text-gray-700">Upload PDF</span>
+            <span className="text-[10px] text-gray-400 text-center px-2">From your device files</span>
           </div>
+          
+          <input 
+            type="file" 
+            ref={cameraInputRef} 
+            className="hidden" 
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileUpload}
+          />
           <input 
             type="file" 
             ref={fileInputRef} 
             className="hidden" 
-            accept="image/*,application/pdf"
+            accept="application/pdf"
             onChange={handleFileUpload}
           />
         </div>
       )}
 
       {status === "processing" && (
-        <div className="border border-blue-100 bg-blue-50/50 rounded-3xl p-8 flex flex-col items-center justify-center gap-4 text-blue-600 shadow-inner">
+        <div className="border border-blue-100 bg-blue-50/50 rounded-3xl p-8 flex flex-col items-center justify-center gap-4 text-blue-600 shadow-inner relative">
+          <button 
+            onClick={() => {
+              setStatus("idle");
+              toast.info("Extraction cancelled");
+            }}
+            className="absolute top-4 right-4 p-1.5 bg-white rounded-full text-gray-400 hover:text-gray-600 shadow-sm"
+          >
+            <X size={14} />
+          </button>
           <Loader2 size={36} className="animate-spin text-blue-500" />
           <div className="text-center">
             <p className="font-bold text-blue-900">AI is analyzing document...</p>
@@ -135,6 +161,12 @@ export function DocumentExtractor({
                </p>
             </div>
           </div>
+          <button 
+            className="mt-4 bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-sm active:scale-95 transition-all"
+            onClick={() => onExtract(result)}
+          >
+            Review extracted data
+          </button>
         </div>
       )}
     </div>

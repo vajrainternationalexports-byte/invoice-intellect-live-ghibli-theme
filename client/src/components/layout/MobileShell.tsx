@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 export function MobileShell({ children }: { children: React.ReactNode }) {
   // To avoid showing nav on 404, we can check location, but let's keep it simple for the prototype
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center sm:p-8 font-sans">
+    <div className="min-h-[100dvh] bg-slate-900 flex items-center justify-center sm:p-8 font-sans">
       <div className="w-full h-[100dvh] sm:max-w-[400px] sm:h-[850px] bg-slate-50 relative overflow-hidden flex flex-col sm:shadow-2xl sm:rounded-[3rem] sm:border-[14px] sm:border-black ring-1 ring-black/5">
         
         {/* iOS Status Bar Mock (only visible on desktop wrapper for realism) */}
@@ -32,7 +32,7 @@ export function MobileShell({ children }: { children: React.ReactNode }) {
         <div className="hidden sm:block absolute top-3 left-1/2 -translate-x-1/2 w-[120px] h-[32px] bg-black rounded-full z-50"></div>
 
         {/* App Content */}
-        <div className="flex-1 overflow-y-auto pb-24 pt-safe sm:pt-14 no-scrollbar bg-slate-50">
+        <div className="flex-1 app-scroll pb-[calc(env(safe-area-inset-bottom)+80px)] pt-safe sm:pt-14 no-scrollbar bg-slate-50">
           {children}
         </div>
 

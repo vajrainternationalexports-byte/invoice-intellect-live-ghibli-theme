@@ -14,7 +14,7 @@ export function BottomNav() {
   ];
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-[#0F172A] border-t border-[#1e293b] pb-safe pt-2 px-2 flex justify-between items-center sm:pb-6 sm:pt-4 z-40">
+    <div className="absolute bottom-0 left-0 right-0 bg-[#0F172A] border-t border-[#1e293b] pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 px-2 flex justify-between items-center sm:pb-6 sm:pt-4 z-[60]">
       {tabs.map((tab) => {
         const isActive = location === tab.href || (tab.href !== "/" && location.startsWith(tab.href));
         return (
