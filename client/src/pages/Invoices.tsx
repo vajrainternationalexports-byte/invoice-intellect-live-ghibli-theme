@@ -58,8 +58,8 @@ export default function Invoices() {
     toast.success(`Scheduled for ${format(date, "dd/MM/yyyy")}`);
   };
 
-  const handleDownloadExcel = () => {
-    downloadExcel(invoices, "Purchase_Invoices", "Invoices");
+  const handleDownloadExcel = async () => {
+    await downloadExcel(invoices, "Purchase_Invoices", "Invoices");
     toast.success("Purchase Invoices exported to Excel");
   };
 

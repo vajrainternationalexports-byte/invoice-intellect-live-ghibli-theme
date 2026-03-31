@@ -27,8 +27,8 @@ export default function PurchaseOrder() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] }),
   });
 
-  const handleDownloadExcel = () => {
-    downloadExcel(pos, "Purchase_Orders", "POs");
+  const handleDownloadExcel = async () => {
+    await downloadExcel(pos, "Purchase_Orders", "POs");
     toast.success("Purchase Orders exported to Excel");
   };
 

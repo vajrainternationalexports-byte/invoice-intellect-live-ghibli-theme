@@ -16,8 +16,8 @@ export default function JobWorkDashboard() {
     { month: "Oct", balance: -890 }
   ];
 
-  const handleDownloadExcel = () => {
-    downloadExcel(chartData, "Zinc_Ledger_Dashboard", "Ledger");
+  const handleDownloadExcel = async () => {
+    await downloadExcel(chartData, "Zinc_Ledger_Dashboard", "Ledger");
     toast.success("Zinc Ledger exported to Excel");
   };
 

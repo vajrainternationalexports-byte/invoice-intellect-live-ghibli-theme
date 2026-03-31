@@ -9,8 +9,8 @@ export default function Reconciliation() {
     queryKey: ["/api/reconciliation"],
   });
 
-  const handleDownloadExcel = () => {
-    downloadExcel(records, "Reconciliation_Report", "Reconciliation");
+  const handleDownloadExcel = async () => {
+    await downloadExcel(records, "Reconciliation_Report", "Reconciliation");
     toast.success("Reconciliation exported to Excel");
   };
 

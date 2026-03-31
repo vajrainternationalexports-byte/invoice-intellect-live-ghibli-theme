@@ -23,8 +23,8 @@ export default function Vendors() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vendors"] }),
   });
 
-  const handleDownloadExcel = () => {
-    downloadExcel(vendors, "Vendors_Master", "Vendors");
+  const handleDownloadExcel = async () => {
+    await downloadExcel(vendors, "Vendors_Master", "Vendors");
     toast.success("Vendors exported to Excel");
   };
 

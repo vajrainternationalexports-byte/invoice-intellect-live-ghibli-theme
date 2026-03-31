@@ -286,10 +286,10 @@ export default function JobWork() {
     }, 2000);
   };
 
-  const handleDownloadExcel = () => {
+  const handleDownloadExcel = async () => {
     if (activeTab === 'incoming') {
       if (subTab === 'vendors') {
-        downloadExcel(vendorBalances, "Zinc_Vendor_Balances", "Balances");
+        await downloadExcel(vendorBalances, "Zinc_Vendor_Balances", "Balances");
       } else {
         const flattenedChallans = entries.map(e => ({
           Challan: e.challan,
@@ -298,10 +298,10 @@ export default function JobWork() {
           LorryNo: e.lorryNo,
           NetZinc: e.items.reduce((s:any,i:any)=>s+i.zinc, 0).toFixed(2)
         }));
-        downloadExcel(flattenedChallans, "JobWork_Challans", "Challans");
+        await downloadExcel(flattenedChallans, "JobWork_Challans", "Challans");
       }
     } else {
-      downloadExcel(labourInvoices, "Labour_Invoices", "Labour");
+      await downloadExcel(labourInvoices, "Labour_Invoices", "Labour");
     }
     toast.success("Job Work data exported to Excel");
   };

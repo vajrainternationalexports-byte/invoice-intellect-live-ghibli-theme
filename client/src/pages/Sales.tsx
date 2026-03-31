@@ -36,8 +36,8 @@ export default function Sales() {
     }
   };
 
-  const handleDownloadExcel = () => {
-    downloadExcel(invoices, "Sales_Invoices", "Sales");
+  const handleDownloadExcel = async () => {
+    await downloadExcel(invoices, "Sales_Invoices", "Sales");
     toast.success("Sales Invoices exported to Excel");
   };
 
