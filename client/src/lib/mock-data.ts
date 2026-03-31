@@ -47,8 +47,36 @@ export const mockData = {
     }
   ],
   vendors: [
-    { id: "V-001", name: "Acme India Pvt Ltd.", gstin: "27GVPPS1234A1Z5", labourOutstanding: 12500, totalPaid: 45000 },
-    { id: "V-002", name: "Bharat Industrial", gstin: "09AAACB1234P1Z2", labourOutstanding: 8400, totalPaid: 22000 }
+    { 
+      id: "V-001", 
+      name: "Acme India Pvt Ltd.", 
+      gstin: "27GVPPS1234A1Z5", 
+      labourOutstanding: 12500, 
+      totalPaid: 45000,
+      totalSpent: 125000,
+      contact: "vendor@acmeindia.com",
+      owner: "Rajesh Kumar",
+      riskScore: "Low",
+      duplicateWarning: false,
+      totalOrders: 24,
+      lastOrderDate: "Mar 28, 2026",
+      bankDetails: { bankName: "ICICI Bank", accountNumber: "1234567890", routingNumber: "ICIC0000123" }
+    },
+    { 
+      id: "V-002", 
+      name: "Bharat Industrial", 
+      gstin: "09AAACB1234P1Z2", 
+      labourOutstanding: 8400, 
+      totalPaid: 22000,
+      totalSpent: 87500,
+      contact: "inquiry@bharatind.com",
+      owner: "Priya Singh",
+      riskScore: "Low",
+      duplicateWarning: false,
+      totalOrders: 18,
+      lastOrderDate: "Mar 25, 2026",
+      bankDetails: { bankName: "HDFC Bank", accountNumber: "9876543210", routingNumber: "HDFC0000456" }
+    }
   ],
   jobWorkEntries: [
     {
@@ -182,6 +210,28 @@ export const mockData = {
       ordered: 100,
       received: 60,
       pending: 40
+    }
+  ],
+  reconciliation: [
+    {
+      id: "REC-001",
+      invoiceId: "PUR/24/001",
+      vendor: "Acme India Pvt Ltd.",
+      invoiceAmount: 4500,
+      paidAmount: 4500,
+      difference: 0,
+      status: "matched",
+      date: "Oct 24, 2023"
+    },
+    {
+      id: "REC-002",
+      invoiceId: "PUR/24/002",
+      vendor: "Bharat Industrial",
+      invoiceAmount: 8500,
+      paidAmount: 8200,
+      difference: 300,
+      status: "discrepancy",
+      date: "Oct 25, 2023"
     }
   ]
 };
