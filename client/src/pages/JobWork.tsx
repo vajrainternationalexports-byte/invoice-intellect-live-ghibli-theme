@@ -28,6 +28,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, Dr
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { DocumentExtractor } from "@/components/DocumentExtractor";
 
 export default function JobWork() {
   const [activeTab, setActiveTab] = useState<'incoming' | 'labour'>('incoming');
@@ -41,6 +42,8 @@ export default function JobWork() {
   const [isEntryDrawerOpen, setIsEntryDrawerOpen] = useState(false);
   const [isLabourDrawerOpen, setIsLabourDrawerOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [showScanDrawer, setShowScanDrawer] = useState(false);
+  const [scanDocType, setScanDocType] = useState<"ZINC_STATEMENT_IES" | "LABOUR_INVOICE" | "AUTO_DETECT">("AUTO_DETECT");
 
   // Form States
   const [formHeader, setFormHeader] = useState({
@@ -221,9 +224,20 @@ export default function JobWork() {
       <header className="space-y-3">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Job Work</h1>
-          <button onClick={() => activeTab === 'incoming' ? setIsEntryDrawerOpen(true) : setIsLabourDrawerOpen(true)} className="h-9 w-9 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all">
-            <Plus size={20} />
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => {
+                setScanDocType(activeTab === 'incoming' ? 'ZINC_STATEMENT_IES' : 'LABOUR_INVOICE');
+                setShowScanDrawer(true);
+              }} 
+              className="h-9 w-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all"
+            >
+              <Camera size={18} />
+            </button>
+            <button onClick={() => activeTab === 'incoming' ? setIsEntryDrawerOpen(true) : setIsLabourDrawerOpen(true)} className="h-9 w-9 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all">
+              <Plus size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-1 bg-gray-200/50 p-1 rounded-xl">
@@ -365,7 +379,7 @@ export default function JobWork() {
               <button onClick={() => setIsLabourDrawerOpen(true)} className="flex-1 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold shadow-sm active:scale-95 transition-all">
                 <Plus size={16} className="text-emerald-600" /> New Entry
               </button>
-              <button onClick={handleLabourScan} className="flex-1 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold shadow-sm active:scale-95 transition-all">
+              <button onClick={() => { setScanDocType('LABOUR_INVOICE'); setShowScanDrawer(true); }} className="flex-1 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold shadow-sm active:scale-95 transition-all">
                 <Camera size={16} className="text-emerald-600" /> Scan
               </button>
             </div>
@@ -697,6 +711,56 @@ export default function JobWork() {
               </button>
             </div>
            </div>
+        </DrawerContent>
+      </Drawer>
+      {/* Document Scanner Drawer */}
+      <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
+        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+          <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
+            <DocumentExtractor 
+              docTypeHint={scanDocType}
+              onExtract={(data) => {
+                console.log("Extracted Data:", data);
+                setTimeout(() => {
+                  setShowScanDrawer(false);
+                  if (scanDocType === 'LABOUR_INVOICE') {
+                    setLabourForm({
+                      ...labourForm,
+                      invNo: data.invoice_no || "INV/LB/" + Math.floor(Math.random() * 999),
+                      vehicleNo: data.line_items?.[0]?.dispatch_doc_no || "WB11C-8888",
+                      weight: data.line_items?.[0]?.weight_kgs?.toString() || "1250",
+                      rate: data.line_items?.[0]?.rate_per_kg?.toString() || "12.40",
+                      total: data.totals?.invoice_total?.toString() || "15500",
+                      vendor: data.galvanizer?.name || mockData.vendors[0].name,
+                      date: data.invoice_date || format(new Date(), "yyyy-MM-dd"),
+                    });
+                    setIsLabourDrawerOpen(true);
+                  } else {
+                    setFormHeader({
+                      challan: data.transactions?.[0]?.party_challan_no || "J/128",
+                      date: data.period_to || format(new Date(), "yyyy-MM-dd"),
+                      lorryNo: "WB11C-8888",
+                      vendor: "Acme India Pvt Ltd."
+                    });
+                    if (data.transactions && data.transactions.length > 0) {
+                       setFormItems(data.transactions.map((t: any) => ({
+                         material: t.description || "Material",
+                         thick: "",
+                         pcs: t.qty_nos?.toString() || "",
+                         partyWt: t.weight_kgs?.toString() || "0",
+                         ourWt: t.weight_kgs?.toString() || "0",
+                         rate: t.zinc_percent?.toString() || "0",
+                         zinc: t.zinc_consumed_kgs || 0
+                       })));
+                    }
+                    setIsEntryDrawerOpen(true);
+                  }
+                  toast.success(`${scanDocType === 'LABOUR_INVOICE' ? 'Labour Invoice' : 'Zinc Statement'} extracted`);
+                }, 1500);
+              }}
+              onCancel={() => setShowScanDrawer(false)}
+            />
+          </div>
         </DrawerContent>
       </Drawer>
     </div>

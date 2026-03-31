@@ -1,20 +1,32 @@
 import { useState } from "react";
 import { mockData } from "@/lib/mock-data";
-import { Receipt, Package, Truck, Clock, CheckCircle2, AlertCircle, Plus, Search } from "lucide-react";
+import { Receipt, Package, Truck, Clock, CheckCircle2, AlertCircle, Plus, Search, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { toast } from "sonner";
 
 export default function PurchaseOrder() {
   const [activeTab, setActiveTab] = useState("open");
+  const [showScanDrawer, setShowScanDrawer] = useState(false);
 
   return (
     <div className="p-3 space-y-4 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
       <header className="space-y-3">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Purchase Orders</h1>
-          <button className="h-8 w-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all">
-            <Plus size={18} />
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setShowScanDrawer(true)} 
+              className="h-9 w-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all"
+            >
+              <Camera size={18} />
+            </button>
+            <button className="h-9 w-9 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all">
+              <Plus size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="relative">
@@ -75,6 +87,24 @@ export default function PurchaseOrder() {
           </div>
         ))}
       </div>
+
+      <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
+        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+          <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
+            <DocumentExtractor 
+              docTypeHint="PURCHASE_ORDER"
+              onExtract={(data) => {
+                console.log("Extracted Data:", data);
+                setTimeout(() => {
+                  setShowScanDrawer(false);
+                  toast.success("Purchase Order extracted successfully");
+                }, 2000);
+              }}
+              onCancel={() => setShowScanDrawer(false)}
+            />
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

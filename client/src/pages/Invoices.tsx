@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { Label } from "@/components/ui/label";
+import { DocumentExtractor } from "@/components/DocumentExtractor";
 
 export default function Invoices() {
   const [activeTab, setActiveTab] = useState("all");
@@ -17,16 +18,7 @@ export default function Invoices() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedInvoice, setSelectedInvoice] = useState<typeof mockData.invoices[0] | null>(null);
   
-  const [isScanning, setIsScanning] = useState(false);
   const [showScanDrawer, setShowScanDrawer] = useState(false);
-  const [scannedData, setScannedData] = useState({
-    vendor: "",
-    amount: "",
-    id: "",
-    irn: "",
-    gstin: "",
-    date: format(new Date(), "MMM dd, yyyy")
-  });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,42 +53,7 @@ export default function Invoices() {
   };
 
   const handleScan = () => {
-    setIsScanning(true);
     setShowScanDrawer(true);
-    setTimeout(() => {
-      setScannedData({
-        vendor: "Bharat Industrial Supplies",
-        amount: "12500.00",
-        id: "INV/24-25/088",
-        irn: "4a2b6c...9e8f",
-        gstin: "27GVPPS1234A1Z5",
-        date: format(new Date(), "MMM dd, yyyy")
-      });
-      setIsScanning(false);
-      toast.info("e-Invoice Validated");
-    }, 2500);
-  };
-
-  const saveScannedInvoice = () => {
-    if (!scannedData.vendor || !scannedData.amount) {
-      toast.error("Please fill in required details");
-      return;
-    }
-    const newInvoice = {
-      id: scannedData.id || "INV-" + Math.floor(Math.random() * 1000),
-      vendor: scannedData.vendor,
-      irn: scannedData.irn,
-      gstin: scannedData.gstin,
-      amount: parseFloat(scannedData.amount),
-      date: scannedData.date,
-      dueDate: format(new Date(), "MMM dd, yyyy"),
-      status: "needs_review",
-      confidence: 94,
-      items: [{ desc: "e-Invoice Line Item", qty: 1, price: parseFloat(scannedData.amount) }]
-    };
-    setInvoices([newInvoice, ...invoices]);
-    setShowScanDrawer(false);
-    toast.success("Invoice added");
   };
 
   const downloadExcel = () => {
@@ -266,39 +223,35 @@ export default function Invoices() {
 
       <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
         <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
-          <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
-            <DrawerHeader className="p-0 text-left">
-              <div className="flex justify-between items-center mb-4">
-                <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary"><Camera size={24} /></div>
-                <DrawerClose className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></DrawerClose>
-              </div>
-              <DrawerTitle className="text-xl font-bold">{isScanning ? "Scanning..." : "Verify Details"}</DrawerTitle>
-            </DrawerHeader>
-            {isScanning ? (
-              <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                <div className="h-24 w-24 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Vendor</Label>
-                  <Input value={scannedData.vendor} onChange={(e) => setScannedData({...scannedData, vendor: e.target.value})} className="h-12 rounded-xl bg-gray-50" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Amount (₹)</Label>
-                    <Input value={scannedData.amount} onChange={(e) => setScannedData({...scannedData, amount: e.target.value})} className="h-12 rounded-xl bg-gray-50" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">GSTIN</Label>
-                    <Input value={scannedData.gstin} onChange={(e) => setScannedData({...scannedData, gstin: e.target.value})} className="h-12 rounded-xl bg-gray-50 font-mono" />
-                  </div>
-                </div>
-                <div className="pt-4 pb-safe">
-                  <button onClick={saveScannedInvoice} className="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2">Save e-Invoice</button>
-                </div>
-              </div>
-            )}
+          <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
+            <DocumentExtractor 
+              docTypeHint="TAX_INVOICE"
+              onExtract={(data) => {
+                console.log("Extracted Data:", data);
+                setTimeout(() => {
+                  setShowScanDrawer(false);
+                  const newInvoice = {
+                    id: data.invoice_no || "INV-" + Math.floor(Math.random() * 1000),
+                    vendor: data.seller?.name || "Extracted Vendor",
+                    irn: data.irn_number || "",
+                    gstin: data.seller?.gstin || "",
+                    amount: data.totals?.invoice_total || 0,
+                    date: data.invoice_date || format(new Date(), "MMM dd, yyyy"),
+                    dueDate: format(new Date(), "MMM dd, yyyy"),
+                    status: "needs_review",
+                    confidence: 99,
+                    items: data.line_items?.map((item: any) => ({
+                      desc: item.description,
+                      qty: item.quantity,
+                      price: item.total_amount
+                    })) || []
+                  };
+                  setInvoices([newInvoice, ...invoices]);
+                  toast.success("Invoice added successfully");
+                }, 1500);
+              }}
+              onCancel={() => setShowScanDrawer(false)}
+            />
           </div>
         </DrawerContent>
       </Drawer>

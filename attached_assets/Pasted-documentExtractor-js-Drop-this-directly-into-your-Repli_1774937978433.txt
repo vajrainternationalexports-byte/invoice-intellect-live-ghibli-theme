@@ -1,0 +1,20 @@
+documentExtractor.js — Drop this directly into your Replit app at src/lib/documentExtractor.js. It contains:
+
+MASTER_SYSTEM_PROMPT — the single system prompt for all Claude API calls. Pre-loaded with IES's GSTIN, bank details, address, invoice numbering format, and all 11 extraction rules
+EXTRACTION_PROMPTS — five separate user prompts keyed by document type: TAX_INVOICE, PURCHASE_ORDER, ZINC_STATEMENT_IES, ZINC_LEDGER_GALVANIZER, LABOUR_INVOICE, and AUTO_DETECT
+extractDocumentWithClaude() — the main async function. Pass {fileBase64, mimeType, docTypeHint}. Handles both PDF (document block) and images (image block). Returns {success, data, validation, raw_text}
+validateExtractedData() — arithmetic checks for invoice totals, GST type consistency, zinc balance verification, PO completeness
+computeZincRunningBalance() — takes array of zinc statements and produces running due/excess ledger
+trackPOFulfilment() — maps each PO line item against issued invoices and returns qty ordered / qty invoiced / qty pending / completion%
+ZINC_PERCENT_LOOKUP + estimateZincConsumption() — the actual zinc percentages extracted from your historical statements (9.6% for 600mm ladder tray, 6.2% for coupler plates, 6.7% for 2.8mm side plate, etc.)
+
+IES_App_Master_Spec.md — Complete architecture document with:
+
+SQL schemas for all five tables (sales_invoices, po_line_items, zinc_statements, zinc_ledger_months, etc.)
+Full React component code for DocumentExtractor.jsx with upload + camera toggle, extraction status states, and per-document summary cards
+API route handler for /api/extract-document
+Navigation structure for all four modules
+GST rules specific to IES (intra-state WB vs inter-state for BHEL/AM-NS/NFL)
+Zinc calculation rules per product/thickness derived from your actual statements
+
+The AUTO_DETECT prompt is the safe default — it identifies the document type first, then applies the correct schema. Use specific type hints when you know what you're uploading to get faster, more precise extraction.

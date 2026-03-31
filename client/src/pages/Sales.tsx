@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { Label } from "@/components/ui/label";
+import { DocumentExtractor } from "@/components/DocumentExtractor";
 
 export default function Sales() {
   const [activeTab, setActiveTab] = useState("all");
@@ -13,6 +14,7 @@ export default function Sales() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'invoices' | 'customers'>('invoices');
+  const [showScanDrawer, setShowScanDrawer] = useState(false);
 
   const getStatusIcon = (status: string, size = 14) => {
     switch(status) {
@@ -44,9 +46,20 @@ export default function Sales() {
           </div>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-          <Input placeholder={`Search ${viewMode}...`} className="pl-9 bg-gray-100/50 border-0 h-10 text-sm rounded-xl" />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+            <Input placeholder={`Search ${viewMode}...`} className="pl-9 bg-gray-100/50 border-0 h-10 text-sm rounded-xl" />
+          </div>
+          {viewMode === 'invoices' && (
+            <button 
+              onClick={() => setShowScanDrawer(true)}
+              className="h-10 px-4 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all"
+            >
+              <Camera size={16} />
+              <span className="hidden sm:inline">Scan</span>
+            </button>
+          )}
         </div>
 
         {viewMode === 'invoices' && (
@@ -186,6 +199,25 @@ export default function Sales() {
               <button className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold active:scale-95 transition-all" onClick={() => setSelectedCustomer(null)}>Done</button>
             </div>
           )}
+        </DrawerContent>
+      </Drawer>
+      {/* Document Scanner Drawer */}
+      <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
+        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+          <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
+            <DocumentExtractor 
+              docTypeHint="TAX_INVOICE"
+              onExtract={(data) => {
+                // In a real app we'd populate a form here
+                console.log("Extracted Data:", data);
+                setTimeout(() => {
+                  setShowScanDrawer(false);
+                  toast.success("Sales invoice added successfully");
+                }, 2000);
+              }}
+              onCancel={() => setShowScanDrawer(false)}
+            />
+          </div>
         </DrawerContent>
       </Drawer>
     </div>
