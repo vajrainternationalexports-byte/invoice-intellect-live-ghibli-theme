@@ -21,13 +21,13 @@ export const mockData = {
   ],
   invoices: [
     {
-      id: "PUR/24/001",
+      id: "PUR/25-26/001",
       irn: "1234...5678",
       vendor: "Acme India Pvt Ltd.",
       gstin: "27AAAAA0000A1Z5",
       amount: 4500.00,
-      date: "Oct 24, 2023",
-      dueDate: "Nov 24, 2023",
+      date: "Oct 24, 2025",
+      dueDate: "Nov 24, 2025",
       status: "pending",
       confidence: 98,
       items: [{ desc: "Server Hardware", qty: 2, price: 2000 }, { desc: "Shipping", qty: 1, price: 500 }]
@@ -35,12 +35,12 @@ export const mockData = {
   ],
   salesInvoices: [
     {
-      id: "SAL/24/001",
+      id: "IES/25-26/0109",
       customer: "Reliance Industries",
       gstin: "27AAACR0001A1Z1",
       amount: 15400.00,
-      date: "Oct 25, 2023",
-      dueDate: "Nov 05, 2023",
+      date: "Oct 25, 2025",
+      dueDate: "Nov 05, 2025",
       status: "pending",
       confidence: 99,
       items: [{ desc: "Galvanized Steel", qty: 5, price: 3000 }]
@@ -203,35 +203,50 @@ export const mockData = {
   ],
   purchaseOrders: [
     {
-      id: "PO-2024-001",
-      vendor: "Acme India",
-      date: "Oct 01, 2023",
+      id: "AM/NS-HAZ/PJ7/5300062248",
+      vendor: "AM/NS India",
+      date: "Oct 01, 2025",
       status: "Partially fulfilled",
       ordered: 100,
       received: 60,
       pending: 40
+    },
+    {
+      id: "BANDR/71139/SBU-IX/PO/CABLE TRAY/03",
+      vendor: "Bridge & Roof",
+      date: "Nov 15, 2025",
+      status: "Pending",
+      ordered: 50,
+      received: 0,
+      pending: 50
     }
   ],
   reconciliation: [
     {
       id: "REC-001",
-      invoiceId: "PUR/24/001",
+      invoiceId: "PUR/25-26/001",
+      poNumber: "AM/NS-HAZ/PJ7/5300062248",
       vendor: "Acme India Pvt Ltd.",
-      invoiceAmount: 4500,
-      paidAmount: 4500,
+      invAmount: 4500,
+      poAmount: 4500,
       difference: 0,
-      status: "matched",
-      date: "Oct 24, 2023"
+      margin: 12.5,
+      salesOrder: "SO-1024",
+      matchStatus: "matched",
+      date: "Oct 24, 2025"
     },
     {
       id: "REC-002",
-      invoiceId: "PUR/24/002",
+      invoiceId: "PUR/25-26/002",
+      poNumber: "BANDR/71139/SBU-IX/PO/CABLE TRAY/03",
       vendor: "Bharat Industrial",
-      invoiceAmount: 8500,
-      paidAmount: 8200,
+      invAmount: 8500,
+      poAmount: 8200,
       difference: 300,
-      status: "discrepancy",
-      date: "Oct 25, 2023"
+      margin: 8.2,
+      salesOrder: "SO-1025",
+      matchStatus: "discrepancy",
+      date: "Oct 25, 2025"
     }
   ]
 };

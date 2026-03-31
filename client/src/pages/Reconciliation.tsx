@@ -1,13 +1,25 @@
 import { mockData } from "@/lib/mock-data";
-import { Link2, AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
+import { Link2, AlertTriangle, CheckCircle2, TrendingUp, FileDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { downloadExcel } from "@/lib/excel-export";
+import { toast } from "sonner";
 
 export default function Reconciliation() {
+  const handleDownloadExcel = () => {
+    downloadExcel(mockData.reconciliation, "Reconciliation_Report", "Reconciliation");
+    toast.success("Reconciliation exported to Excel");
+  };
+
   return (
     <div className="p-4 space-y-6 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Reconciliation</h1>
-        <p className="text-sm text-gray-500 mt-1">3-Way matching and margins</p>
+      <header className="flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Reconciliation</h1>
+          <p className="text-sm text-gray-500 mt-1">3-Way matching and margins</p>
+        </div>
+        <button onClick={handleDownloadExcel} className="h-9 px-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-90 transition-all text-xs font-bold uppercase tracking-wider">
+          <FileDown size={16} /> Excel
+        </button>
       </header>
 
       <div className="space-y-4">

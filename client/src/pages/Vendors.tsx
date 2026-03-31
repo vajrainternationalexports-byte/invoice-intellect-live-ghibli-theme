@@ -1,17 +1,36 @@
 import { useState } from "react";
 import { mockData } from "@/lib/mock-data";
-import { ShieldAlert, ShieldCheck, Mail, AlertTriangle, ChevronRight, X, Building, User, Hash, Landmark, Calendar, Package } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Mail, AlertTriangle, ChevronRight, X, Building, User, Hash, Landmark, Calendar, Package, FileDown, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
+import { downloadExcel } from "@/lib/excel-export";
+import { toast } from "sonner";
+import { DocumentExtractor } from "@/components/DocumentExtractor";
 
 export default function Vendors() {
   const [selectedVendor, setSelectedVendor] = useState<typeof mockData.vendors[0] | null>(null);
+  const [showScanDrawer, setShowScanDrawer] = useState(false);
+
+  const handleDownloadExcel = () => {
+    downloadExcel(mockData.vendors, "Vendors_Master", "Vendors");
+    toast.success("Vendors exported to Excel");
+  };
 
   return (
-    <div className="p-4 space-y-6 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Vendors</h1>
-        <p className="text-sm text-gray-500 mt-1">Intelligence & Deduplication</p>
+    <div className="p-4 space-y-6 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500 pb-20">
+      <header className="flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Vendors</h1>
+          <p className="text-sm text-gray-500 mt-1">Intelligence & Deduplication</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setShowScanDrawer(true)} className="h-9 w-9 bg-primary/10 text-primary border border-primary/20 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all">
+            <Camera size={16} />
+          </button>
+          <button onClick={handleDownloadExcel} className="h-9 px-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-90 transition-all text-xs font-bold uppercase tracking-wider">
+            <FileDown size={16} /> Excel
+          </button>
+        </div>
       </header>
 
       {/* Intelligence Alert */}
@@ -171,6 +190,24 @@ export default function Vendors() {
               </div>
             </div>
           )}
+        </DrawerContent>
+      </Drawer>
+
+      <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
+        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+          <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
+            <DocumentExtractor 
+              docTypeHint="AUTO_DETECT"
+              onExtract={(data) => {
+                console.log("Extracted Vendor Data:", data);
+                setTimeout(() => {
+                  setShowScanDrawer(false);
+                  toast.success("Vendor details extracted successfully");
+                }, 2000);
+              }}
+              onCancel={() => setShowScanDrawer(false)}
+            />
+          </div>
         </DrawerContent>
       </Drawer>
     </div>

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
+import { downloadExcel } from "@/lib/excel-export";
 import { Label } from "@/components/ui/label";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
 
@@ -24,8 +25,11 @@ export default function Sales() {
     }
   };
 
-  const downloadExcel = () => {
-    toast.info("Generating Sales & Receivables report...");
+  const handleDownloadExcel = () => {
+    const dataToExport = viewMode === 'invoices' ? invoices : mockData.customers;
+    const fileName = viewMode === 'invoices' ? "Sales_Invoices" : "Customers";
+    downloadExcel(dataToExport, fileName, fileName);
+    toast.success(`${fileName} exported to Excel`);
   };
 
   return (
@@ -40,7 +44,7 @@ export default function Sales() {
             >
               {viewMode === 'invoices' ? 'Customers' : 'Invoices'}
             </button>
-            <button onClick={downloadExcel} className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100">
+            <button onClick={handleDownloadExcel} className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 active:scale-95 transition-all">
               <FileDown size={16} />
             </button>
           </div>

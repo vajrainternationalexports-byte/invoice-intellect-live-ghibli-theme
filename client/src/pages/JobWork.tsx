@@ -20,7 +20,8 @@ import {
   Receipt,
   FileText,
   CreditCard,
-  History
+  History,
+  Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { downloadExcel } from "@/lib/excel-export";
+import { FileDown } from "lucide-react";
+import { Link } from "wouter";
 
 export default function JobWork() {
   const [activeTab, setActiveTab] = useState<'incoming' | 'labour'>('incoming');
@@ -219,12 +223,35 @@ export default function JobWork() {
     }, 2000);
   };
 
+  const handleDownloadExcel = () => {
+    if (activeTab === 'incoming') {
+      if (subTab === 'vendors') {
+        downloadExcel(vendorBalances, "Zinc_Vendor_Balances", "Balances");
+      } else {
+        const flattenedChallans = entries.map(e => ({
+          Challan: e.challan,
+          Date: e.date,
+          Vendor: e.vendor,
+          LorryNo: e.lorryNo,
+          NetZinc: e.items.reduce((s:any,i:any)=>s+i.zinc, 0).toFixed(2)
+        }));
+        downloadExcel(flattenedChallans, "JobWork_Challans", "Challans");
+      }
+    } else {
+      downloadExcel(labourInvoices, "Labour_Invoices", "Labour");
+    }
+    toast.success("Job Work data exported to Excel");
+  };
+
   return (
     <div className="p-3 space-y-4 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500 pb-20">
       <header className="space-y-3">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Job Work</h1>
           <div className="flex gap-2">
+            <button onClick={handleDownloadExcel} className="h-9 w-9 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all">
+              <FileDown size={18} />
+            </button>
             <button 
               onClick={() => {
                 setScanDocType(activeTab === 'incoming' ? 'ZINC_STATEMENT_IES' : 'LABOUR_INVOICE');
@@ -262,30 +289,33 @@ export default function JobWork() {
         {activeTab === 'incoming' ? (
           <>
             {/* Zinc Stats Card */}
-            <div className="bg-gray-900 rounded-3xl p-5 text-white shadow-xl">
-              <div className="flex justify-between items-start mb-4">
-                <div className="space-y-0.5">
-                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-60">Net Zinc Balance</p>
-                  <h2 className="text-3xl font-black">{(totals.consumed - totals.received).toFixed(2)} KG</h2>
+            <Link href="/jobwork/dashboard">
+              <div className="bg-[#0F172A] rounded-3xl p-5 text-white shadow-xl cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                <div className="flex justify-between items-start mb-4 relative z-10">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Net Zinc Balance</p>
+                    <h2 className="text-3xl font-black text-emerald-400">{(totals.consumed - totals.received).toFixed(2)} KG</h2>
+                  </div>
+                  <div className="bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Activity size={12} /> Dashboard
+                  </div>
                 </div>
-                <div className={cn("px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider", (totals.consumed - totals.received) > 0 ? "bg-rose-500/20 text-rose-300" : "bg-emerald-500/20 text-emerald-300")}>
-                  {(totals.consumed - totals.received) > 0 ? "Receivable" : "Payable"}
+                <div className="space-y-1 mb-4 opacity-60 relative z-10">
+                  <p className="text-[9px] font-bold uppercase tracking-tighter text-slate-300">Formula: Σ (Our Wt × Rate %) - Σ (Zinc Received)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800 relative z-10">
+                  <div>
+                    <p className="text-[8px] font-bold uppercase text-slate-400">Total Incoming (OUR.Wt)</p>
+                    <p className="text-sm font-black text-white">{totals.ourWt.toLocaleString()} KG</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold uppercase text-slate-400">Zinc Consumed</p>
+                    <p className="text-sm font-black text-rose-400">{totals.consumed.toFixed(2)} KG</p>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-1 mb-4 opacity-40">
-                <p className="text-[8px] font-bold uppercase tracking-tighter italic">Formula: Σ (Our Wt × Rate %) - Σ (Zinc Received)</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
-                <div>
-                  <p className="text-[8px] font-bold uppercase opacity-40">Total Incoming (OUR.Wt)</p>
-                  <p className="text-sm font-black">{totals.ourWt.toLocaleString()} KG</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[8px] font-bold uppercase opacity-40">Zinc Consumed</p>
-                  <p className="text-sm font-black">{totals.consumed.toFixed(2)} KG</p>
-                </div>
-              </div>
-            </div>
+            </Link>
 
             {subTab === 'vendors' ? (
               vendorBalances.map((v, i) => (

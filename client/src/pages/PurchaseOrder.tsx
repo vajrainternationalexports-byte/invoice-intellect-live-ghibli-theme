@@ -6,10 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
 import { toast } from "sonner";
+import { downloadExcel } from "@/lib/excel-export";
+import { FileDown } from "lucide-react";
 
 export default function PurchaseOrder() {
   const [activeTab, setActiveTab] = useState("open");
   const [showScanDrawer, setShowScanDrawer] = useState(false);
+
+  const handleDownloadExcel = () => {
+    downloadExcel(mockData.purchaseOrders, "Purchase_Orders", "POs");
+    toast.success("Purchase Orders exported to Excel");
+  };
 
   return (
     <div className="p-3 space-y-4 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
@@ -17,6 +24,9 @@ export default function PurchaseOrder() {
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Purchase Orders</h1>
           <div className="flex gap-2">
+            <button onClick={handleDownloadExcel} className="h-9 w-9 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all">
+              <FileDown size={18} />
+            </button>
             <button 
               onClick={() => setShowScanDrawer(true)} 
               className="h-9 w-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all"

@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { Label } from "@/components/ui/label";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { downloadExcel } from "@/lib/excel-export";
 
 export default function Invoices() {
   const [activeTab, setActiveTab] = useState("all");
@@ -56,15 +57,9 @@ export default function Invoices() {
     setShowScanDrawer(true);
   };
 
-  const downloadExcel = () => {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-      {
-        loading: 'Preparing Excel report...',
-        success: 'Invoices_Report_MAR2026.xlsx downloaded successfully',
-        error: 'Failed to generate report',
-      }
-    );
+  const handleDownloadExcel = () => {
+    downloadExcel(invoices, "Purchase_Invoices", "Invoices");
+    toast.success("Purchase Invoices exported to Excel");
   };
 
   return (
@@ -73,7 +68,7 @@ export default function Invoices() {
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Invoices</h1>
           <button 
-            onClick={downloadExcel}
+            onClick={handleDownloadExcel}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 active:scale-95 transition-all"
           >
             <FileDown size={14} />
