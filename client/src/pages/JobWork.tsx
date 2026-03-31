@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { mockData } from "@/lib/mock-data";
 import { 
   Plus, 
@@ -188,24 +190,39 @@ export default function JobWork() {
     }, 2000);
   };
 
-  const handleLabourSave = () => {
+  const handleLabourSave = async () => {
     if (!labourForm.invNo || !labourForm.total) {
       toast.error("Invoice No and Total Amount are mandatory");
       return;
     }
     
-    // Determine status based on some mock logic or default to pending
     const status = parseFloat(labourForm.total) > 15000 ? "needs_review" : "pending";
     
-    const newInv = {
-      id: "L-" + Date.now(),
-      ...labourForm,
-      ...labourCalculations,
-      status: status
+    const payload = {
+      invoiceNo: labourForm.invNo,
+      invoiceDate: labourForm.date,
+      galvanizerName: labourForm.vendor,
+      taxableAmount: String(labourCalculations.basic),
+      totalGst: String(labourCalculations.gstAmount),
+      invoiceTotal: String(parseFloat(labourForm.total)),
+      tdsAmount: String(labourCalculations.tds),
+      netPayable: String(labourCalculations.payable),
+      status,
     };
-    setLabourInvoices([newInv as any, ...labourInvoices]);
-    setIsLabourDrawerOpen(false);
-    toast.success(`Labour Invoice Saved (${status.replace('_', ' ')})`);
+
+    try {
+      const res = await fetch("/api/labour-invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const saved = await res.json();
+      setLabourInvoices([{ ...saved, ...labourForm, ...labourCalculations, status } as any, ...labourInvoices]);
+      setIsLabourDrawerOpen(false);
+      toast.success(`Labour Invoice Saved (${status.replace('_', ' ')})`);
+    } catch (e: any) {
+      toast.error("Failed to save: " + e.message);
+    }
   };
 
   const handleLabourApprove = (id: string) => {

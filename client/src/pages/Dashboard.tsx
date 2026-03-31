@@ -1,8 +1,6 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { mockData } from "@/lib/mock-data";
+import { useQuery } from "@tanstack/react-query";
 import { 
   ArrowUpRight, 
-  ArrowDownLeft, 
   Layers, 
   ShoppingBag, 
   ChevronRight,
@@ -13,7 +11,21 @@ import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
-  const stats = mockData.stats;
+  const { data: summary } = useQuery<any>({
+    queryKey: ["/api/dashboard"],
+  });
+
+  const stats = {
+    totalPending: summary?.purchases?.total ?? 0,
+    upcomingPayments: summary?.purchases?.pending ?? 0,
+    discrepancies: summary?.purchases?.needsReview ?? 0,
+    totalReceivable: summary?.sales?.total ?? 0,
+    receivable15Days: (summary?.sales?.total ?? 0) * 0.4,
+    receivable45Days: (summary?.sales?.total ?? 0) * 0.6,
+    labourChargesPayable: 0,
+    zincPendingQty: Math.abs(summary?.jobWork?.zincDueKg ?? 0).toFixed(1),
+    zincPendingValue: Math.abs(summary?.jobWork?.zincDueKg ?? 0) * 185,
+  };
 
   const mainModules = [
     { id: 'purchase', name: 'Purchase', href: '/invoices', icon: ShoppingBag, color: 'bg-blue-600' },

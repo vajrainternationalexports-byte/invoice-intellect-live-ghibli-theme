@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { Camera, Upload, Loader2, FileText, CheckCircle2, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { extractDocumentWithClaude } from "@/lib/documentExtractor";
 import { toast } from "sonner";
 
 export function DocumentExtractor({
@@ -27,40 +26,24 @@ export function DocumentExtractor({
       const mimeType = file.type;
 
       try {
-        let response;
-        try {
-          response = await extractDocumentWithClaude({
-            fileBase64: base64String,
-            mimeType,
-            docTypeHint
-          });
-        } catch (e) {
-          response = null;
-        }
+        const res = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileBase64: base64String, mimeType, docTypeHint }),
+        });
 
-        // Mockup fallback
-        if (!response || !response.success || response.error?.includes("Failed to fetch")) {
-           console.log("Mocking extraction due to API key absence");
-           await new Promise(r => setTimeout(r, 2000));
-           response = {
-             success: true,
-             data: generateMockDataForType(docTypeHint),
-             validation: { valid: true, errors: [], warnings: [] }
-           };
-        }
+        const response = await res.json();
 
-        if (response.success) {
+        if (response.success && response.data) {
           setStatus("success");
           setResult(response.data);
-          
-          // Auto-advance to review screen after 1 second per S2 W
           setTimeout(() => {
             onExtract(response.data);
             toast.success("Document extracted successfully");
           }, 1000);
         } else {
           setStatus("error");
-          toast.error("Failed to extract document");
+          toast.error(response.error || "Failed to extract document");
         }
       } catch (err: any) {
         setStatus("error");
