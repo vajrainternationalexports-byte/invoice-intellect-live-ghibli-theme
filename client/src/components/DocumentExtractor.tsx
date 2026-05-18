@@ -6,11 +6,13 @@ import { toast } from "sonner";
 export function DocumentExtractor({
   docTypeHint = "AUTO_DETECT",
   onExtract,
-  onCancel
+  onCancel,
+  onFileSelected
 }: {
   docTypeHint?: string;
   onExtract: (data: any) => void;
   onCancel?: () => void;
+  onFileSelected?: (file: File) => void;
 }) {
   const [status, setStatus] = useState<"idle" | "processing" | "success" | "error">("idle");
   const [result, setResult] = useState<any>(null);
@@ -18,6 +20,10 @@ export function DocumentExtractor({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = async (file: File) => {
+    if (onFileSelected) {
+      onFileSelected(file);
+      return;
+    }
     setStatus("processing");
     
     const reader = new FileReader();
