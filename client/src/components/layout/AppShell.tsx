@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto no-scrollbar pt-10 sm:pt-12 relative">
+        <main className="flex-1 overflow-y-auto no-scrollbar pt-10 sm:pt-12">
           <AnimatePresence mode="wait">
             <motion.div
               key={location}

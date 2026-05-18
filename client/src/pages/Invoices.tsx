@@ -2039,14 +2039,14 @@ export default function Purchases() {
               {/* Dynamic Simulated Original Invoice Scanned Document Preview Modal */}
               <AnimatePresence>
                 {showDocPreview && selectedInvoice && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+                  <div className="absolute inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
                     {/* Backdrop */}
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       onClick={() => setShowDocPreview(false)}
-                      className="fixed inset-0 bg-blue-ink/65 backdrop-blur-sm animate-fade-in"
+                      className="absolute inset-0 bg-blue-ink/65 backdrop-blur-sm animate-fade-in"
                     />
                     
                     {/* Sheet Container */}
@@ -2133,7 +2133,7 @@ export default function Purchases() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-6 left-4 right-4 z-40 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl flex flex-col gap-3"
+            className="absolute bottom-6 left-4 right-4 z-40 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl flex flex-col gap-3"
             style={{ backgroundColor: "rgba(15, 23, 42, 0.95)" }}
           >
             <div className="flex justify-between items-center border-b border-white/10 pb-2">
