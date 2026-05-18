@@ -359,47 +359,6 @@ export default function Purchases() {
         ))}
       </div>
 
-      {/* Core Systems Control Bar */}
-      <div className="flex justify-between items-center bg-blue-light/50 border border-blue-mid/10 rounded-2xl px-4 py-2 text-[10px]">
-        <div className="flex items-center gap-1.5">
-          <span className="font-black text-blue-ink uppercase tracking-wider">Systems Control:</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* GRN System switch */}
-          <button 
-            onClick={() => {
-              setGrnSystemEnabled(!grnSystemEnabled);
-              toast.success(`GRN Matching System turned ${!grnSystemEnabled ? "ON" : "OFF"}`);
-            }}
-            className={cn(
-              "flex items-center gap-1 px-2.5 py-1 rounded-full font-black uppercase tracking-wider transition-all border",
-              grnSystemEnabled 
-                ? "bg-green-500/10 text-green-700 border-green-500/20" 
-                : "bg-slate-200/50 text-slate-400 border-slate-300/30"
-            )}
-          >
-            <CheckCircle2 size={10} />
-            <span>GRN Control</span>
-          </button>
-
-          {/* Maker Checker Switch */}
-          <button 
-            onClick={() => {
-              setMakerCheckerEnabled(!makerCheckerEnabled);
-              toast.success(`Maker-Checker AP Mode turned ${!makerCheckerEnabled ? "ON" : "OFF"}`);
-            }}
-            className={cn(
-              "flex items-center gap-1 px-2.5 py-1 rounded-full font-black uppercase tracking-wider transition-all border",
-              makerCheckerEnabled 
-                ? "bg-blue-500/10 text-blue-700 border-blue-500/20" 
-                : "bg-slate-200/50 text-slate-400 border-slate-300/30"
-            )}
-          >
-            <ShieldCheck size={10} />
-            <span>Maker-Checker</span>
-          </button>
-        </div>
-      </div>
 
       {/* Stacked Filter Layer */}
       <div className="space-y-2">
@@ -649,6 +608,48 @@ export default function Purchases() {
                   </div>
                 );
               })}
+
+              {/* System Configuration Toggles */}
+              <div className="col-span-2 mt-2 pt-3 border-t border-blue-mid/10 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-ink">System Configurations</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {/* GRN System switch */}
+                  <button 
+                    onClick={() => {
+                      setGrnSystemEnabled(!grnSystemEnabled);
+                      toast.success(`GRN Matching System turned ${!grnSystemEnabled ? "ON" : "OFF"}`);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full font-black uppercase tracking-widest text-[9px] transition-all border",
+                      grnSystemEnabled 
+                        ? "bg-green-500/10 text-green-700 border-green-500/20" 
+                        : "bg-slate-200/50 text-slate-400 border-slate-300/30"
+                    )}
+                  >
+                    <CheckCircle2 size={10} />
+                    <span>GRN Matching</span>
+                  </button>
+
+                  {/* Maker Checker Switch */}
+                  <button 
+                    onClick={() => {
+                      setMakerCheckerEnabled(!makerCheckerEnabled);
+                      toast.success(`Maker-Checker AP Mode turned ${!makerCheckerEnabled ? "ON" : "OFF"}`);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full font-black uppercase tracking-widest text-[9px] transition-all border",
+                      makerCheckerEnabled 
+                        ? "bg-blue-500/10 text-blue-700 border-blue-500/20" 
+                        : "bg-slate-200/50 text-slate-400 border-slate-300/30"
+                    )}
+                  >
+                    <ShieldCheck size={10} />
+                    <span>Maker-Checker</span>
+                  </button>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
