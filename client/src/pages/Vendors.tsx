@@ -1,223 +1,230 @@
+/**
+ * Vendors.tsx — Vendor master directory
+ * Clean layout, instant search, premium drawer with full details.
+ */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { ShieldCheck, ShieldAlert, AlertTriangle, ChevronRight, X, Building, User, Hash, Landmark, FileDown, Camera, Plus, Mail } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
-import { downloadExcel } from "@/lib/excel-export";
+import {
+  ShieldCheck, ChevronRight, X, Building,
+  User, Phone, Mail, MapPin, FileDown, Camera, Plus
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { ProfileMenu } from "@/components/layout/ProfileMenu";
+import { downloadExcel } from "@/lib/excel-export";
+import { useLocalFilter } from "@/hooks/useLocalFilter";
+import { cn } from "@/lib/utils";
+
+const TYPE_BADGE: Record<string, string> = {
+  galvanizer: "badge-warning",
+  supplier:   "badge-info",
+};
 
 export default function Vendors() {
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
   const [showScanDrawer, setShowScanDrawer] = useState(false);
+  const qc = useQueryClient();
 
-  const queryClient = useQueryClient();
-
-  const { data: vendors = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/vendors"],
-  });
+  const { data: vendors = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/vendors"] });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/vendors", data).then(r => r.json()),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vendors"] }),
+    mutationFn: (d: any) => apiRequest("POST", "/api/vendors", d).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/vendors"] }),
   });
 
-  const handleDownloadExcel = async () => {
-    await downloadExcel(vendors, "Vendors_Master", "Vendors");
-    toast.success("Vendors exported to Excel");
-  };
+  const { search, setSearch, filtered } = useLocalFilter({
+    items: vendors,
+    searchFields: ["name", "gstin", "city", "state"],
+  });
 
   const handleExtract = async (data: any) => {
     const party = data.buyer || data.seller || data.bill_to || data.galvanizer || {};
-    const vendorPayload = {
-      name: party.organization_name || party.name || party.company_name || "Unknown Vendor",
-      gstin: party.gstin,
-      address: party.address_line1 || party.address,
-      city: party.city,
-      state: party.state,
-      pincode: party.pincode,
+    const payload = {
+      name:          party.organization_name || party.name || party.company_name || "Unknown Vendor",
+      gstin:         party.gstin,
+      address:       party.address_line1 || party.address,
+      city:          party.city,
+      state:         party.state,
+      pincode:       party.pincode,
       contactPerson: party.contact_person,
-      phone: party.contact_phone || party.contact_no,
-      email: party.contact_email,
-      vendorType: data.document_type === "LABOUR_INVOICE" ? "galvanizer" : "supplier",
+      phone:         party.contact_phone || party.contact_no,
+      email:         party.contact_email,
+      vendorType:    data.document_type === "LABOUR_INVOICE" ? "galvanizer" : "supplier",
     };
     try {
-      await createMutation.mutateAsync(vendorPayload);
+      await createMutation.mutateAsync(payload);
       setShowScanDrawer(false);
-      toast.success("Vendor extracted and saved");
+      toast.success("Vendor saved ✓");
     } catch (e: any) {
-      toast.error("Failed to save vendor: " + e.message);
+      toast.error("Save failed: " + e.message);
     }
   };
 
+  /* Group counts */
+  const galvCount  = vendors.filter((v: any) => v.vendorType === "galvanizer").length;
+  const suppCount  = vendors.filter((v: any) => v.vendorType !== "galvanizer").length;
+
   return (
-    <div className="p-4 space-y-6 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500 pb-20">
-      <header className="flex justify-between items-start">
+    <div className="space-y-4 py-4 pb-6">
+      {/* Header */}
+      <header className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Vendors</h1>
-          <p className="text-sm text-gray-500 mt-1">Master directory</p>
+          <span className="section-label block mb-1">Master Directory</span>
+          <h1 className="text-3xl font-black text-blue-ink tracking-tight">Vendors</h1>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowScanDrawer(true)} className="h-9 w-9 bg-primary/10 text-primary border border-primary/20 rounded-xl flex items-center justify-center shadow-sm active:scale-90 transition-all">
-            <Camera size={16} />
-          </button>
-          <button onClick={handleDownloadExcel} className="h-9 px-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-90 transition-all text-xs font-bold uppercase tracking-wider">
-            <FileDown size={16} /> Excel
-          </button>
+          <motion.button whileTap={{ scale: 0.88 }}
+            onClick={() => downloadExcel(vendors, "Vendors_Master", "Vendors").then(() => toast.success("Exported"))}
+            className="icon-btn">
+            <FileDown size={18} />
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.88 }}
+            onClick={() => setShowScanDrawer(true)}
+            className="icon-btn icon-btn-primary">
+            <Plus size={18} />
+          </motion.button>
+          <ProfileMenu />
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar">
-        {isLoading && <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Loading vendors...</div>}
+      {/* Stats strip */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card p-4 text-center">
+          <p className="fin-num text-2xl text-blue-ink">{galvCount}</p>
+          <p className="section-label mt-1">Galvanizers</p>
+        </div>
+        <div className="card p-4 text-center">
+          <p className="fin-num text-2xl text-blue-ink">{suppCount}</p>
+          <p className="section-label mt-1">Suppliers</p>
+        </div>
+      </div>
 
-        {!isLoading && vendors.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-40 gap-3 text-gray-400">
-            <Building size={36} className="opacity-30" />
-            <p className="text-sm font-medium text-center">No vendors yet.<br />Scan an invoice to auto-extract vendor details.</p>
-            <button onClick={() => setShowScanDrawer(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold active:scale-95 transition-all">
-              <Camera size={14} /> Scan Invoice
+      {/* Search */}
+      <div className="relative">
+        <Building className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
+        <input className="search-input" placeholder="Search name, GSTIN, city..."
+          value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      {/* List */}
+      <div className="space-y-3">
+        {isLoading && [1,2,3].map(i => <div key={i} className="skeleton h-20 w-full" />)}
+
+        {!isLoading && filtered.length === 0 && (
+          <div className="flex flex-col items-center h-48 justify-center gap-3 text-blue-mid/30">
+            <div className="h-16 w-16 rounded-[2rem] bg-white/60 flex items-center justify-center border border-blue-mid/10">
+              <Building size={28} />
+            </div>
+            <p className="text-xs font-bold uppercase tracking-widest">No vendors found</p>
+            <button onClick={() => setShowScanDrawer(true)}
+              className="btn-primary text-xs px-6 py-3 w-auto">
+              + Scan Invoice
             </button>
           </div>
         )}
 
-        {vendors.map((vendor: any) => (
-          <div
-            key={vendor.id}
-            onClick={() => setSelectedVendor(vendor)}
-            className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all flex items-center justify-between"
-          >
-            <div className="flex-1">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                    {vendor.name}
-                    <span className={cn(
-                      "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide",
-                      vendor.vendorType === "galvanizer" ? "bg-amber-50 text-amber-600" : "bg-blue-50 text-blue-600"
-                    )}>
-                      {vendor.vendorType}
-                    </span>
-                  </h3>
-                  {vendor.gstin && (
-                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">GSTIN: {vendor.gstin}</p>
-                  )}
-                </div>
-                <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
+        <AnimatePresence>
+          {filtered.map((vendor: any) => (
+            <motion.div
+              key={vendor.id} layout
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              whileTap={{ scale: 0.982 }}
+              onClick={() => setSelectedVendor(vendor)}
+              className="card card-interactive p-4 flex items-center gap-4"
+            >
+              {/* Avatar */}
+              <div className={cn(
+                "h-11 w-11 rounded-xl flex items-center justify-center text-white font-black text-base flex-shrink-0",
+                vendor.vendorType === "galvanizer" ? "bg-amber-500" : "bg-blue-deep"
+              )}>
+                {(vendor.name || "?")[0].toUpperCase()}
               </div>
 
-              {(vendor.city || vendor.state) && (
-                <p className="text-[10px] text-gray-400">{[vendor.city, vendor.state].filter(Boolean).join(", ")}</p>
-              )}
-              {vendor.contactPerson && (
-                <p className="text-[10px] text-gray-500 font-medium mt-1">Contact: {vendor.contactPerson}</p>
-              )}
-            </div>
-            <ChevronRight className="text-gray-300 ml-2" size={20} />
-          </div>
-        ))}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="font-black text-blue-ink text-sm truncate">{vendor.name}</h3>
+                  <span className={cn("badge flex-shrink-0", TYPE_BADGE[vendor.vendorType] ?? "badge-neutral")}>
+                    {vendor.vendorType}
+                  </span>
+                </div>
+                {vendor.gstin && (
+                  <p className="text-[10px] font-mono text-blue-mid/60 truncate">{vendor.gstin}</p>
+                )}
+                {(vendor.city || vendor.state) && (
+                  <p className="text-[10px] text-blue-mid/40 font-medium">
+                    {[vendor.city, vendor.state].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <ShieldCheck size={14} className="text-green-500 opacity-70" />
+                <ChevronRight size={14} className="text-blue-mid/25" />
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       {/* Vendor Detail Drawer */}
-      <Drawer open={!!selectedVendor} onOpenChange={open => !open && setSelectedVendor(null)}>
-        <DrawerContent className="max-h-[85dvh] bg-gray-50 p-0 rounded-t-[2.5rem]">
+      <Drawer open={!!selectedVendor} onOpenChange={o => !o && setSelectedVendor(null)}>
+        <DrawerContent className="max-h-[90dvh] bg-blue-light border-blue-mid/10 rounded-t-[2.5rem]">
           {selectedVendor && (
-            <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
+            <div className="p-6 space-y-5 overflow-y-auto no-scrollbar pb-10">
               <DrawerHeader className="p-0 text-left">
-                <div className="flex justify-between items-center mb-2">
-                  <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                    <Building size={32} />
+                <div className="flex justify-between items-start mb-4">
+                  <div className={cn(
+                    "h-14 w-14 rounded-2xl flex items-center justify-center text-white text-xl font-black",
+                    selectedVendor.vendorType === "galvanizer" ? "bg-amber-500" : "bg-blue-deep"
+                  )}>
+                    {(selectedVendor.name || "?")[0].toUpperCase()}
                   </div>
-                  <DrawerClose className="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center">
-                    <X size={20} />
-                  </DrawerClose>
+                  <DrawerClose className="icon-btn"><X size={18} /></DrawerClose>
                 </div>
-                <DrawerTitle className="text-2xl font-bold">{selectedVendor.name}</DrawerTitle>
-                <DrawerDescription className="text-gray-500 font-mono text-xs">
-                  {selectedVendor.gstin ? `GSTIN: ${selectedVendor.gstin}` : "No GSTIN recorded"}
+                <DrawerTitle className="text-2xl font-black text-blue-ink">{selectedVendor.name}</DrawerTitle>
+                <DrawerDescription className="text-[10px] font-mono text-blue-mid/60 mt-1 uppercase tracking-widest">
+                  {selectedVendor.gstin || "No GSTIN recorded"}
                 </DrawerDescription>
               </DrawerHeader>
 
-              <div className="bg-white p-5 rounded-2xl shadow-sm space-y-4">
-                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Details</h4>
-                <div className="space-y-3">
-                  {selectedVendor.address && (
+              <div className="card p-5 space-y-4">
+                <span className="section-label">Contact Details</span>
+                <div className="divider" />
+                {[
+                  selectedVendor.address     && { Icon: MapPin, label: "Address",  value: selectedVendor.address },
+                  selectedVendor.city        && { Icon: MapPin, label: "City",     value: [selectedVendor.city, selectedVendor.state, selectedVendor.pincode].filter(Boolean).join(", ") },
+                  selectedVendor.contactPerson && { Icon: User,  label: "Contact", value: selectedVendor.contactPerson },
+                  selectedVendor.phone       && { Icon: Phone,  label: "Phone",    value: selectedVendor.phone },
+                  selectedVendor.email       && { Icon: Mail,   label: "Email",    value: selectedVendor.email },
+                ].filter(Boolean).map((row: any) => (
+                  <div key={row.label} className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-blue-light flex items-center justify-center text-blue-mid flex-shrink-0 mt-0.5">
+                      <row.Icon size={14} />
+                    </div>
                     <div>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase">Address</p>
-                      <p className="text-sm font-medium text-gray-900">{selectedVendor.address}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-blue-mid/50">{row.label}</p>
+                      <p className="text-sm font-bold text-blue-ink">{row.value}</p>
                     </div>
-                  )}
-                  {(selectedVendor.city || selectedVendor.state) && (
-                    <div className="flex gap-6">
-                      {selectedVendor.city && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">City</p>
-                          <p className="text-sm font-bold text-gray-900">{selectedVendor.city}</p>
-                        </div>
-                      )}
-                      {selectedVendor.state && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">State</p>
-                          <p className="text-sm font-bold text-gray-900">{selectedVendor.state}</p>
-                        </div>
-                      )}
-                      {selectedVendor.pincode && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">Pincode</p>
-                          <p className="text-sm font-bold text-gray-900">{selectedVendor.pincode}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {selectedVendor.contactPerson && (
-                    <div className="flex items-center gap-3 pt-2 border-t border-gray-50">
-                      <div className="h-9 w-9 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400"><User size={16} /></div>
-                      <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Contact Person</p>
-                        <p className="font-semibold text-gray-900 text-sm">{selectedVendor.contactPerson}</p>
-                      </div>
-                    </div>
-                  )}
-                  {selectedVendor.phone && (
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400"><Hash size={16} /></div>
-                      <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Phone</p>
-                        <p className="font-semibold text-gray-900 text-sm">{selectedVendor.phone}</p>
-                      </div>
-                    </div>
-                  )}
-                  {selectedVendor.email && (
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400"><Mail size={16} /></div>
-                      <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Email</p>
-                        <p className="font-semibold text-gray-900 text-sm">{selectedVendor.email}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ))}
               </div>
 
-              <div className="pb-safe pt-2">
-                <button className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all" onClick={() => setSelectedVendor(null)}>
-                  Done
-                </button>
+              <div className="pb-safe">
+                <button onClick={() => setSelectedVendor(null)} className="btn-primary">Done</button>
               </div>
             </div>
           )}
         </DrawerContent>
       </Drawer>
 
-      {/* Scanner Drawer */}
+      {/* Scanner */}
       <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
-        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+        <DrawerContent className="max-h-[92dvh] bg-white border-blue-mid/10 rounded-t-[2.5rem]">
           <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
-            <DocumentExtractor
-              docTypeHint="AUTO_DETECT"
-              onExtract={handleExtract}
-              onCancel={() => setShowScanDrawer(false)}
-            />
+            <DocumentExtractor docTypeHint="AUTO_DETECT" onExtract={handleExtract} onCancel={() => setShowScanDrawer(false)} />
           </div>
         </DrawerContent>
       </Drawer>

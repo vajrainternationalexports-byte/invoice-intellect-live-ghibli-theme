@@ -170,25 +170,288 @@ export async function registerRoutes(
   app.get("/api/purchase-invoices", async (_req, res) => {
     res.json(await storage.listPurchaseInvoices());
   });
+
   app.get("/api/purchase-invoices/:id", async (req, res) => {
     const inv = await storage.getPurchaseInvoice(req.params.id);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
     res.json(inv);
   });
+
   app.post("/api/purchase-invoices", async (req, res) => {
-    const parsed = insertPurchaseInvoiceSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    res.status(201).json(await storage.createPurchaseInvoice(parsed.data));
+    try {
+      const body = { ...req.body };
+      
+      // 1. Validate GSTIN Format if present
+      if (body.vendorGstin) {
+        const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        if (!gstinRegex.test(body.vendorGstin)) {
+          body.status = "needs_review";
+          body.disputeReason = "Invalid GSTIN format detected";
+        }
+      }
+
+      // 2. State-code based supply type auto-detection (IES is West Bengal: code 19)
+      if (body.vendorGstin) {
+        const stateCode = body.vendorGstin.slice(0, 2);
+        if (stateCode === "19") {
+          body.supplyType = "Intrastate";
+          // Calculate CGST / SGST split
+          const totalGst = parseFloat(body.totalGst || "0");
+          if (totalGst > 0 && parseFloat(body.igstAmount || "0") > 0) {
+            body.status = "needs_review";
+            body.disputeReason = "Tax conflict: Interstate tax (IGST) coexisting with Intrastate supply";
+          }
+          if (parseFloat(body.cgstAmount || "0") === 0 && parseFloat(body.sgstAmount || "0") === 0) {
+            body.cgstAmount = String((totalGst / 2).toFixed(2));
+            body.sgstAmount = String((totalGst / 2).toFixed(2));
+            body.igstAmount = "0.00";
+          }
+        } else {
+          body.supplyType = "Interstate";
+          const totalGst = parseFloat(body.totalGst || "0");
+          if (totalGst > 0 && (parseFloat(body.cgstAmount || "0") > 0 || parseFloat(body.sgstAmount || "0") > 0)) {
+            body.status = "needs_review";
+            body.disputeReason = "Tax conflict: Intrastate taxes (CGST/SGST) coexisting with Interstate supply";
+          }
+          if (parseFloat(body.igstAmount || "0") === 0) {
+            body.igstAmount = String(totalGst.toFixed(2));
+            body.cgstAmount = "0.00";
+            body.sgstAmount = "0.00";
+          }
+        }
+      }
+
+      // 3. Duplicate Invoice Detection
+      const allInvoices = await storage.listPurchaseInvoices();
+      const isDuplicate = allInvoices.some((inv: any) => 
+        inv.invoiceNo.toLowerCase().trim() === (body.invoiceNo || "").toLowerCase().trim() &&
+        inv.vendorName?.toLowerCase().trim() === (body.vendorName || "").toLowerCase().trim()
+      );
+      if (isDuplicate) {
+        body.status = "needs_review";
+        body.disputeReason = "Potential duplicate invoice detected (matching number and vendor name)";
+      }
+
+      // 4. TDS Section 194Q Threshold check & deduction
+      // If single seller annual purchase exceeds ₹50 Lakh (5,000,000)
+      if (body.vendorId) {
+        const vendorInvoices = allInvoices.filter((inv: any) => inv.vendorId === body.vendorId);
+        const ytdTotal = vendorInvoices.reduce((sum: number, inv: any) => sum + parseFloat(inv.invoiceTotal || "0"), 0);
+        const currentTotal = parseFloat(body.invoiceTotal || "0");
+        const threshold = 5000000; // ₹50 Lakhs
+        
+        if (ytdTotal + currentTotal > threshold) {
+          body.tcsApplicable = true;
+          // Calculate taxable portion exceeding 50L limit
+          const taxableExceeding = Math.max(0, (ytdTotal + currentTotal) - threshold);
+          const currentTaxable = parseFloat(body.taxableAmount || "0");
+          
+          // Deduct 0.1% TDS on the applicable current amount
+          const rate = 0.001; // 0.1%
+          const calculatedTds = currentTaxable * rate;
+          body.tdsDeducted = String(calculatedTds.toFixed(2));
+        }
+      }
+
+      // 5. OCR Confidence Gating
+      const confidence = body.ocrConfidence ?? 100;
+      if (confidence < 90) {
+        body.status = "needs_review";
+        body.disputeReason = (body.disputeReason ? body.disputeReason + " | " : "") + `OCR confidence score low (${confidence}%)`;
+      }
+
+      // 6. Default net 30 payment terms due-date math
+      if (body.invoiceDate && !body.dueDate) {
+        const d = new Date(body.invoiceDate);
+        d.setDate(d.getDate() + 30);
+        body.dueDate = d.toISOString().split("T")[0];
+      }
+
+      const parsed = insertPurchaseInvoiceSchema.safeParse(body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      
+      const created = await storage.createPurchaseInvoice(parsed.data);
+
+      // Audit and Logs
+      await storage.createOcrLog({
+        filename: body.filename || `${body.invoiceNo}.pdf`,
+        docType: "TAX_INVOICE",
+        rawText: body.rawText || `Extracted invoice ${body.invoiceNo}`,
+        extractedJson: created,
+        confidenceScore: confidence,
+        verificationStatus: created.status === "needs_review" ? "manual_corrected" : "auto_approved"
+      });
+
+      await storage.createApprovalLog({
+        documentType: "purchase_invoice",
+        documentId: created.id,
+        action: created.status === "needs_review" ? "submit_for_review" : "auto_processed",
+        actor: body.uploadedBy || "System",
+        comments: created.disputeReason || "Invoice uploaded and processed successfully"
+      });
+
+      await storage.createAuditLog({
+        actionType: "CREATE",
+        entityName: "purchase_invoices",
+        entityId: created.id,
+        details: { invoiceNo: created.invoiceNo, total: created.invoiceTotal, status: created.status },
+        actor: body.uploadedBy || "System"
+      });
+
+      res.status(201).json(created);
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.message });
+    }
   });
+
   app.patch("/api/purchase-invoices/:id", async (req, res) => {
+    const original = await storage.getPurchaseInvoice(req.params.id);
+    if (!original) return res.status(404).json({ error: "Invoice not found" });
+
     const inv = await storage.updatePurchaseInvoice(req.params.id, req.body);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
+
+    // Track status change approvals
+    if (req.body.status && req.body.status !== original.status) {
+      await storage.createApprovalLog({
+        documentType: "purchase_invoice",
+        documentId: inv.id,
+        action: req.body.status === "approved" ? "approve" : req.body.status === "processed" ? "pay" : "update",
+        actor: req.body.updatedBy || "System",
+        comments: req.body.comments || `Status updated from ${original.status} to ${inv.status}`
+      });
+
+      await storage.createAuditLog({
+        actionType: "UPDATE",
+        entityName: "purchase_invoices",
+        entityId: inv.id,
+        details: { previousStatus: original.status, newStatus: inv.status, comments: req.body.comments },
+        actor: req.body.updatedBy || "System"
+      });
+    }
+
     res.json(inv);
   });
+
   app.delete("/api/purchase-invoices/:id", async (req, res) => {
     await storage.deletePurchaseInvoice(req.params.id);
     res.status(204).send();
   });
+
+  // ─── TDS/TCS Rules ──────────────────────────────────────────────
+  app.get("/api/tds-rules", async (_req, res) => {
+    res.json(await storage.listTdsTcsRules());
+  });
+
+  app.post("/api/tds-rules", async (req, res) => {
+    const r = await storage.createTdsTcsRule(req.body);
+    res.status(201).json(r);
+  });
+
+  // ─── Vendor Bank Accounts ───────────────────────────────────────
+  app.get("/api/vendors/:id/bank-accounts", async (req, res) => {
+    res.json(await storage.listVendorBankAccounts(req.params.id));
+  });
+
+  app.post("/api/vendor-bank-accounts", async (req, res) => {
+    const r = await storage.createVendorBankAccount(req.body);
+    await storage.createAuditLog({
+      actionType: "CREATE",
+      entityName: "vendor_bank_accounts",
+      entityId: r.id,
+      details: { bankName: r.bankName, verification: r.verificationStatus },
+      actor: req.body.updatedBy || "System"
+    });
+    res.status(201).json(r);
+  });
+
+  app.patch("/api/vendor-bank-accounts/:id", async (req, res) => {
+    const r = await storage.updateVendorBankAccount(req.params.id, req.body);
+    if (!r) return res.status(404).json({ error: "Bank account not found" });
+    
+    await storage.createAuditLog({
+      actionType: "UPDATE",
+      entityName: "vendor_bank_accounts",
+      entityId: r.id,
+      details: { verification: r.verificationStatus },
+      actor: req.body.updatedBy || "System"
+    });
+    
+    res.json(r);
+  });
+
+  // ─── Payments ───────────────────────────────────────────────────
+  app.get("/api/payments", async (_req, res) => {
+    res.json(await storage.listPayments());
+  });
+
+  app.post("/api/payments", async (req, res) => {
+    try {
+      const p = await storage.createPayment(req.body);
+      
+      // If invoice allocations are included in the request body
+      if (req.body.allocations && Array.isArray(req.body.allocations)) {
+        for (const alloc of req.body.allocations) {
+          await storage.allocatePaymentToInvoice(p.id, alloc.invoiceId, alloc.amount);
+          
+          // Deduct invoice pending totals or transition status
+          const inv = await storage.getPurchaseInvoice(alloc.invoiceId);
+          if (inv) {
+            const currentTotal = parseFloat(inv.invoiceTotal || "0");
+            const allocatedAmt = parseFloat(alloc.amount || "0");
+            
+            let nextStatus = "processed"; // Default fully paid
+            if (allocatedAmt < currentTotal) {
+              nextStatus = "partial";
+            }
+            
+            await storage.updatePurchaseInvoice(alloc.invoiceId, {
+              status: nextStatus
+            });
+
+            await storage.createApprovalLog({
+              documentType: "purchase_invoice",
+              documentId: inv.id,
+              action: "payment_allocated",
+              actor: req.body.actor || "System",
+              comments: `UTR: ${p.utrNumber} | Amount: ₹${alloc.amount} allocated.`
+            });
+          }
+        }
+      }
+
+      await storage.createAuditLog({
+        actionType: "BANK_EXECUTE",
+        entityName: "payments",
+        entityId: p.id,
+        details: { amount: p.amount, utr: p.utrNumber, vendor: p.vendorName },
+        actor: req.body.actor || "System"
+      });
+
+      res.status(201).json(p);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Approval Logs ──────────────────────────────────────────────
+  app.get("/api/approval-logs", async (req, res) => {
+    const { docType, docId } = req.query;
+    if (!docType || !docId) return res.status(400).json({ error: "docType and docId are required" });
+    res.json(await storage.listApprovalLogs(docType as string, docId as string));
+  });
+
+  app.post("/api/approval-logs", async (req, res) => {
+    const r = await storage.createApprovalLog(req.body);
+    res.status(201).json(r);
+  });
+
+  // ─── Audit Logs ─────────────────────────────────────────────────
+  app.get("/api/audit-logs", async (_req, res) => {
+    res.json(await storage.listAuditLogs());
+  });
+
 
   // ─── Sales Invoices ─────────────────────────────────────────────
   app.get("/api/sales-invoices", async (_req, res) => {
@@ -313,19 +576,45 @@ export async function registerRoutes(
         storage.listLabourInvoices(),
       ]);
 
-      const totalPurchase = purchInvoices.reduce((s, i) => s + parseFloat(i.invoiceTotal || "0"), 0);
-      const totalSales = salesInvs.reduce((s, i) => s + parseFloat(i.invoiceTotal || "0"), 0);
-      const pendingPurchase = purchInvoices.filter(i => i.status === "pending").length;
-      const needsReview = purchInvoices.filter(i => i.status === "needs_review").length;
-      const openPOs = pos.filter(p => p.status === "open" || p.status === "partial").length;
-      const totalZincDue = jobWork.reduce((s, j) => s + parseFloat(j.closingZincDueKg || "0"), 0);
+      // Detailed GST Breakdown
+      const gst = {
+        sales: salesInvs.reduce((acc: any, inv: any) => {
+          const raw = inv.rawData as any;
+          return {
+            cgst: acc.cgst + parseFloat(raw?.totals?.total_cgst || "0"),
+            sgst: acc.sgst + parseFloat(raw?.totals?.total_sgst || "0"),
+            igst: acc.igst + parseFloat(raw?.totals?.total_igst || "0"),
+          };
+        }, { cgst: 0, sgst: 0, igst: 0 }),
+        purchases: purchInvoices.reduce((acc: any, inv: any) => {
+          const raw = inv.rawData as any;
+          return {
+            cgst: acc.cgst + parseFloat(raw?.totals?.total_cgst || "0"),
+            sgst: acc.sgst + parseFloat(raw?.totals?.total_sgst || "0"),
+            igst: acc.igst + parseFloat(raw?.totals?.total_igst || "0"),
+          };
+        }, { cgst: 0, sgst: 0, igst: 0 })
+      };
+
+      const totalPurchase = purchInvoices.reduce((s: number, i: any) => s + parseFloat(i.invoiceTotal || "0"), 0);
+      const totalSales = salesInvs.reduce((s: number, i: any) => s + parseFloat(i.invoiceTotal || "0"), 0);
+      const pendingPurchase = purchInvoices.filter((i: any) => i.status === "pending").length;
+      const needsReview = purchInvoices.filter((i: any) => i.status === "needs_review").length;
+      const openPOs = pos.filter((p: any) => p.status === "open" || p.status === "partial").length;
+      
+      // Job Work Rigor: Zinc Balances
+      const zincConsumed = jobWork.reduce((s: number, j: any) => s + (j.items as any[] || []).reduce((sum: number, item: any) => sum + (parseFloat(item.zinc) || 0), 0), 0);
+      const zincReceived = jobWork.reduce((s: number, j: any) => s + (parseFloat(j.zincIngotReceivedKg) || 0), 0);
+      const totalZincDue = zincConsumed - zincReceived;
+
+      const totalLabourPayable = labourInvs.reduce((s: number, i: any) => s + parseFloat(i.total || "0"), 0);
 
       res.json({
-        purchases: { total: totalPurchase, count: purchInvoices.length, pending: pendingPurchase, needsReview },
-        sales: { total: totalSales, count: salesInvs.length },
+        purchases: { total: totalPurchase, count: purchInvoices.length, pending: pendingPurchase, needsReview, gst: gst.purchases },
+        sales: { total: totalSales, count: salesInvs.length, gst: gst.sales },
         purchaseOrders: { count: pos.length, open: openPOs },
-        jobWork: { entries: jobWork.length, zincDueKg: totalZincDue },
-        labourInvoices: { count: labourInvs.length },
+        jobWork: { entries: jobWork.length, zincDueKg: totalZincDue, zincConsumed, zincReceived },
+        labourInvoices: { count: labourInvs.length, totalPayable: totalLabourPayable },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

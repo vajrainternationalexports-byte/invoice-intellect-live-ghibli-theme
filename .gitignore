@@ -4,3 +4,12 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# System caches and temp folders
+.npm_cache/
+.config/
+.local/
+.tmp/
+
+# Environment logs
+*.log

@@ -62,9 +62,9 @@ export function DocumentExtractor({
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="font-bold text-gray-900">AI Document Scanner</h3>
+        <h3 className="font-black text-blue-ink uppercase tracking-widest text-sm">AI Document Scanner</h3>
         {onCancel && (
-          <button onClick={onCancel} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors">
+          <button onClick={onCancel} className="p-2 bg-blue-medium/5 hover:bg-blue-medium/10 rounded-full transition-colors text-blue-medium">
             <X size={16} />
           </button>
         )}
@@ -74,24 +74,24 @@ export function DocumentExtractor({
         <div className="grid grid-cols-2 gap-4">
           <div 
             onClick={() => cameraInputRef.current?.click()}
-            className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-gray-500 cursor-pointer active:scale-95 transition-all hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
           >
-            <div className="h-14 w-14 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center">
+            <div className="h-14 w-14 bg-blue-light text-blue-medium rounded-full flex items-center justify-center">
               <Camera size={24} />
             </div>
-            <span className="font-bold text-sm text-gray-700">Use Camera</span>
-            <span className="text-[10px] text-gray-400 text-center px-2">Take a photo</span>
+            <span className="font-black text-[10px] text-blue-ink uppercase tracking-widest">Use Camera</span>
+            <span className="text-[10px] text-blue-medium/60 text-center px-2 font-bold">Take a photo</span>
           </div>
 
           <div 
             onClick={() => fileInputRef.current?.click()}
-            className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-gray-500 cursor-pointer active:scale-95 transition-all hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
           >
-            <div className="h-14 w-14 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center">
+            <div className="h-14 w-14 bg-blue-medium/10 text-blue-medium rounded-full flex items-center justify-center">
               <Upload size={24} />
             </div>
-            <span className="font-bold text-sm text-gray-700">Upload PDF</span>
-            <span className="text-[10px] text-gray-400 text-center px-2">From your device files</span>
+            <span className="font-black text-[10px] text-blue-ink uppercase tracking-widest">Upload PDF</span>
+            <span className="text-[10px] text-blue-medium/60 text-center px-2 font-bold">From device files</span>
           </div>
           
           <input 
@@ -113,39 +113,40 @@ export function DocumentExtractor({
       )}
 
       {status === "processing" && (
-        <div className="border border-blue-100 bg-blue-50/50 rounded-3xl p-8 flex flex-col items-center justify-center gap-4 text-blue-600 shadow-inner relative">
+        <div className="border border-blue-medium/10 bg-blue-light rounded-[2.5rem] p-10 flex flex-col items-center justify-center gap-6 text-blue-medium shadow-inner relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-blue-medium/5 animate-pulse" />
           <button 
             onClick={() => {
               setStatus("idle");
               toast.info("Extraction cancelled");
             }}
-            className="absolute top-4 right-4 p-1.5 bg-white rounded-full text-gray-400 hover:text-gray-600 shadow-sm"
+            className="absolute top-4 right-4 p-2 bg-white rounded-full text-blue-medium/40 hover:text-blue-medium shadow-sm z-10"
           >
             <X size={14} />
           </button>
-          <Loader2 size={36} className="animate-spin text-blue-500" />
-          <div className="text-center">
-            <p className="font-bold text-blue-900">AI is analyzing document...</p>
-            <p className="text-xs text-blue-600/70 mt-1">Extracting line items and values</p>
+          <Loader2 size={40} className="animate-spin text-blue-medium relative z-10" />
+          <div className="text-center relative z-10">
+            <p className="font-black text-blue-ink uppercase tracking-[0.2em] text-xs">AI is analyzing document...</p>
+            <p className="text-[10px] text-blue-medium font-bold uppercase tracking-widest mt-2">Extracting line items and values</p>
           </div>
         </div>
       )}
 
       {status === "success" && result && (
-        <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 flex flex-col items-center justify-center gap-4 text-emerald-600 animate-in zoom-in-95 duration-300 shadow-sm">
-          <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center">
-            <CheckCircle2 size={36} />
+        <div className="bg-blue-light border border-blue-medium/10 rounded-[2.5rem] p-8 flex flex-col items-center justify-center gap-6 text-blue-medium animate-in zoom-in-95 duration-500 shadow-xl shadow-blue-medium/10">
+          <div className="h-20 w-20 bg-white rounded-[2rem] flex items-center justify-center text-emerald-500 border border-emerald-100 shadow-sm">
+            <CheckCircle2 size={40} />
           </div>
           <div className="text-center">
-            <p className="font-bold text-emerald-900 text-lg">Extraction Complete</p>
-            <div className="bg-white/60 px-3 py-1.5 rounded-lg mt-2 inline-block border border-emerald-100/50">
-               <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">
+            <p className="font-black text-blue-ink text-xl tracking-tight">Extraction Complete</p>
+            <div className="bg-white/60 px-4 py-2 rounded-2xl mt-4 inline-block border border-blue-medium/10 backdrop-blur-sm">
+               <p className="text-[10px] font-black text-blue-medium uppercase tracking-[0.2em]">
                  Found {result.line_items?.length || result.transactions?.length || 0} line items
                </p>
             </div>
           </div>
           <button 
-            className="mt-4 bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-sm active:scale-95 transition-all"
+            className="mt-4 w-full bg-blue-medium text-white px-6 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-medium/20 active:scale-95 transition-all"
             onClick={() => onExtract(result)}
           >
             Review extracted data

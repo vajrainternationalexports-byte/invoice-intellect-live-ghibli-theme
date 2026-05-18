@@ -1,216 +1,270 @@
+/**
+ * Sales.tsx — Sales invoice management
+ * Clean architecture: useLocalFilter hook, InvoiceCard, shared formatters.
+ */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Camera, Search, CheckCircle2, AlertTriangle, Clock, Receipt, X, FileDown, User } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Camera, Search, X, Receipt, CheckCircle2, AlertTriangle, Clock, FileDown, Users, LayoutGrid } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
-import { downloadExcel } from "@/lib/excel-export";
-import { DocumentExtractor } from "@/components/DocumentExtractor";
 import { format } from "date-fns";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
+import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { InvoiceCard } from "@/components/cards/InvoiceCard";
+import { ProfileMenu } from "@/components/layout/ProfileMenu";
+import { downloadExcel } from "@/lib/excel-export";
+import { useLocalFilter } from "@/hooks/useLocalFilter";
+import { formatINR, formatDate } from "@/lib/formatters";
+import { INVOICE_STATUSES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+
+const TABS = [
+  { id: "all",          label: "All"    },
+  { id: "needs_review", label: "Review" },
+  { id: "pending",      label: "Sent"   },
+  { id: "processed",    label: "Paid"   },
+];
 
 export default function Sales() {
-  const [activeTab, setActiveTab] = useState("all");
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<"invoices" | "customers">("invoices");
-  const [showScanDrawer, setShowScanDrawer] = useState(false);
-  const [search, setSearch] = useState("");
-
-  const queryClient = useQueryClient();
+  const [showScanDrawer, setShowScanDrawer]   = useState(false);
+  const [viewMode, setViewMode]               = useState<"invoices" | "customers">("invoices");
+  const qc = useQueryClient();
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/sales-invoices"],
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/sales-invoices", data).then(r => r.json()),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/sales-invoices"] }),
+    mutationFn: (d: any) => apiRequest("POST", "/api/sales-invoices", d).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/sales-invoices"] }),
   });
 
-  const getStatusIcon = (status: string, size = 14) => {
-    switch (status) {
-      case "processed": return <CheckCircle2 size={size} className="text-emerald-500" />;
-      case "needs_review": return <AlertTriangle size={size} className="text-amber-500" />;
-      default: return <Clock size={size} className="text-blue-500" />;
-    }
-  };
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...d }: any) => apiRequest("PATCH", `/api/sales-invoices/${id}`, d).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/sales-invoices"] }),
+  });
 
-  const handleDownloadExcel = async () => {
-    await downloadExcel(invoices, "Sales_Invoices", "Sales");
-    toast.success("Sales Invoices exported to Excel");
-  };
+  const { search, setSearch, activeTab, setActiveTab, filtered } = useLocalFilter({
+    items: invoices,
+    searchFields: ["customerName", "invoiceNo", "customerGstin"],
+    tabKey: "status",
+    defaultTab: "all",
+  });
+
+  /* ── Customer grouping for customer view ── */
+  const customerMap = invoices.reduce((acc: Record<string, any>, inv: any) => {
+    const name = inv.customerName || "Unknown";
+    if (!acc[name]) acc[name] = { name, invoices: [], total: 0 };
+    acc[name].invoices.push(inv);
+    acc[name].total += parseFloat(inv.invoiceTotal || "0");
+    return acc;
+  }, {});
+  const customers = Object.values(customerMap).sort((a: any, b: any) => b.total - a.total);
 
   const handleExtract = async (data: any) => {
     const payload = {
-      invoiceNo: data.invoice_no || `IES-${Date.now()}`,
-      invoiceDate: data.invoice_date || format(new Date(), "yyyy-MM-dd"),
-      financialYear: data.financial_year,
+      invoiceNo:    data.invoice_no || `IES-${Date.now()}`,
+      invoiceDate:  data.invoice_date || format(new Date(), "yyyy-MM-dd"),
       customerName: data.bill_to?.company_name,
-      customerGstin: data.bill_to?.gstin,
-      taxableAmount: String(data.totals?.sub_total_taxable ?? ""),
-      totalGst: String(data.totals?.total_gst ?? ""),
+      customerGstin:data.bill_to?.gstin,
       invoiceTotal: String(data.totals?.invoice_total ?? ""),
-      cgstAmount: String(data.totals?.total_cgst ?? ""),
-      sgstAmount: String(data.totals?.total_sgst ?? ""),
-      igstAmount: String(data.totals?.total_igst ?? ""),
-      supplyType: data.supply_type,
-      irnNumber: data.irn_number,
-      isEInvoice: !!data.irn_number,
-      poReference: data.po_number,
-      status: "needs_review",
-      lineItems: data.line_items || [],
-      rawData: data,
+      taxableAmount:String(data.totals?.sub_total_taxable ?? ""),
+      totalGst:     String(data.totals?.total_gst ?? ""),
+      cgstAmount:   String(data.totals?.total_cgst ?? ""),
+      sgstAmount:   String(data.totals?.total_sgst ?? ""),
+      igstAmount:   String(data.totals?.total_igst ?? ""),
+      irnNumber:    data.irn_number,
+      status:       INVOICE_STATUSES.NEEDS_REVIEW,
+      rawData:      data,
     };
     try {
       await createMutation.mutateAsync(payload);
       setShowScanDrawer(false);
-      toast.success("Sales invoice saved");
+      toast.success("Sales invoice saved ✓");
     } catch (e: any) {
-      toast.error("Failed to save: " + e.message);
+      toast.error("Save failed: " + e.message);
     }
   };
 
-  const filtered = invoices.filter((inv: any) => {
-    const matchesTab = activeTab === "all" || inv.status === activeTab;
-    const matchesSearch = !search || [inv.customerName, inv.invoiceNo].some(f => f?.toLowerCase().includes(search.toLowerCase()));
-    return matchesTab && matchesSearch;
-  });
-
   return (
-    <div className="p-3 space-y-4 h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
-      <header className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h1 className="text-xl font-bold tracking-tight text-gray-900">Sales</h1>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode(viewMode === "invoices" ? "customers" : "invoices")}
-              className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-[11px] font-bold uppercase tracking-wider"
-            >
-              {viewMode === "invoices" ? "Customers" : "Invoices"}
-            </button>
-            <button onClick={handleDownloadExcel} className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 active:scale-95 transition-all">
-              <FileDown size={16} />
-            </button>
-          </div>
+    <div className="space-y-4 py-4 pb-6">
+      {/* Header */}
+      <header className="flex items-start justify-between">
+        <div>
+          <span className="section-label block mb-1">Commerce</span>
+          <h1 className="text-3xl font-black text-blue-ink tracking-tight">Sales</h1>
         </div>
-
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-            <Input
-              placeholder={`Search ${viewMode}...`}
-              className="pl-9 bg-gray-100/50 border-0 h-10 text-sm rounded-xl"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-          {viewMode === "invoices" && (
-            <button onClick={() => setShowScanDrawer(true)}
-              className="h-10 px-4 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all">
-              <Camera size={16} />
-              <span className="hidden sm:inline">Scan</span>
-            </button>
-          )}
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            onClick={() => setViewMode(v => v === "invoices" ? "customers" : "invoices")}
+            className="icon-btn"
+            title={viewMode === "invoices" ? "View by customer" : "View invoices"}
+          >
+            {viewMode === "invoices" ? <Users size={18} /> : <LayoutGrid size={18} />}
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            onClick={() => downloadExcel(invoices, "Sales_Invoices", "Sales").then(() => toast.success("Exported"))}
+            className="icon-btn"
+          >
+            <FileDown size={18} />
+          </motion.button>
+          <ProfileMenu />
         </div>
-
-        {viewMode === "invoices" && (
-          <div className="flex gap-1 bg-gray-200/50 p-1 rounded-xl">
-            {["all", "pending", "needs_review"].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={cn("flex-1 py-1 text-[11px] font-bold rounded-lg capitalize transition-all", activeTab === tab ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}>
-                {tab.replace("_", " ")}
-              </button>
-            ))}
-          </div>
-        )}
       </header>
 
-      <div className="flex-1 overflow-y-auto space-y-2 pb-4 no-scrollbar">
-        {viewMode === "invoices" ? (
-          <>
-            {isLoading && <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Loading...</div>}
-            {!isLoading && filtered.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-32 gap-2 text-gray-400">
-                <Receipt size={32} className="opacity-30" />
-                <p className="text-sm font-medium">No sales invoices yet — scan to add</p>
-              </div>
-            )}
-            {filtered.map((inv: any) => (
-              <div key={inv.id} onClick={() => setSelectedInvoice(inv)}
-                className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 active:scale-[0.98] transition-all cursor-pointer">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0 mr-2">
-                    <h3 className="font-bold text-gray-900 text-sm truncate">{inv.customerName || "Unknown Customer"}</h3>
-                    <p className="text-[10px] text-gray-500 font-medium">{inv.invoiceNo} • {inv.invoiceDate}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-bold text-gray-900 text-sm">₹{parseFloat(inv.invoiceTotal || "0").toLocaleString("en-IN")}</p>
-                    <div className="flex items-center gap-1 justify-end mt-0.5">
-                      {getStatusIcon(inv.status, 12)}
-                      <span className="text-[9px] uppercase font-bold text-gray-400">{inv.status.replace("_", " ")}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-40 gap-2 text-gray-400">
-            <User size={32} className="opacity-30" />
-            <p className="text-sm font-medium">Customer list coming from invoice data</p>
-          </div>
-        )}
+      {/* Search + Scan row */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
+          <input
+            className="search-input"
+            placeholder="Search customer, invoice #..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <motion.button
+          whileTap={{ scale: 0.88 }}
+          onClick={() => setShowScanDrawer(true)}
+          className="icon-btn icon-btn-primary"
+        >
+          <Camera size={18} />
+        </motion.button>
       </div>
 
-      {/* Detail Drawer */}
-      <Drawer open={!!selectedInvoice} onOpenChange={open => !open && setSelectedInvoice(null)}>
-        <DrawerContent className="max-h-[85dvh] bg-gray-50 rounded-t-[2.5rem]">
-          {selectedInvoice && (
-            <div className="p-6 space-y-6 overflow-y-auto no-scrollbar pb-safe">
-              <DrawerHeader className="p-0 text-left">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600"><Receipt size={24} /></div>
-                  <DrawerClose className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center"><X size={16} /></DrawerClose>
+      {/* Tabs */}
+      <div className="tab-group">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} className={cn("tab-item", activeTab === t.id && "active")}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <AnimatePresence mode="popLayout">
+        {isLoading && (
+          <div className="space-y-3">
+            {[1,2,3].map(i => <div key={i} className="skeleton h-20 w-full" />)}
+          </div>
+        )}
+
+        {/* Invoice view */}
+        {!isLoading && viewMode === "invoices" && (
+          <div className="space-y-3">
+            {filtered.length === 0 ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="flex flex-col items-center justify-center h-48 gap-3 text-blue-mid/30">
+                <div className="h-16 w-16 rounded-[2rem] bg-white/60 flex items-center justify-center border border-blue-mid/10">
+                  <Receipt size={28} />
                 </div>
-                <DrawerTitle className="text-xl font-bold">{selectedInvoice.customerName || "Unknown Customer"}</DrawerTitle>
-                <DrawerDescription className="text-xs text-gray-500">Invoice: {selectedInvoice.invoiceNo}</DrawerDescription>
+                <p className="text-xs font-bold uppercase tracking-widest">No records found</p>
+              </motion.div>
+            ) : filtered.map((inv: any) => (
+              <InvoiceCard
+                key={inv.id}
+                name={inv.customerName}
+                invoiceNo={inv.invoiceNo}
+                date={inv.invoiceDate}
+                total={inv.invoiceTotal}
+                status={inv.status}
+                hasEInvoice={inv.isEInvoice}
+                onClick={() => setSelectedInvoice(inv)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Customer view */}
+        {!isLoading && viewMode === "customers" && (
+          <div className="space-y-3">
+            {customers.map((cust: any) => (
+              <motion.div
+                key={cust.name}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="card p-4 flex items-center gap-4"
+              >
+                <div className="h-10 w-10 rounded-xl bg-blue-deep flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+                  {cust.name[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-blue-ink text-sm truncate">{cust.name}</h3>
+                  <p className="text-[10px] text-blue-mid/60 font-medium mt-0.5">
+                    {cust.invoices.length} invoice{cust.invoices.length !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="fin-num text-base text-blue-ink">{formatINR(cust.total)}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Detail Drawer */}
+      <Drawer open={!!selectedInvoice} onOpenChange={o => !o && setSelectedInvoice(null)}>
+        <DrawerContent className="max-h-[92dvh] bg-blue-light border-blue-mid/10 rounded-t-[2.5rem]">
+          {selectedInvoice && (
+            <div className="p-6 space-y-5 overflow-y-auto no-scrollbar pb-10">
+              <DrawerHeader className="p-0 text-left">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10">
+                    <Receipt size={22} />
+                  </div>
+                  <DrawerClose className="icon-btn"><X size={18} /></DrawerClose>
+                </div>
+                <DrawerTitle className="text-2xl font-black text-blue-ink">
+                  {selectedInvoice.customerName || "Unknown Customer"}
+                </DrawerTitle>
+                <DrawerDescription className="text-sm text-blue-mid mt-0.5">
+                  {selectedInvoice.invoiceNo} · {formatDate(selectedInvoice.invoiceDate)}
+                </DrawerDescription>
               </DrawerHeader>
 
-              <div className="bg-white p-4 rounded-2xl shadow-sm space-y-3">
-                <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                  <span className="text-xs text-gray-400 font-bold uppercase">Receivable Amount</span>
-                  <span className="text-lg text-gray-900 font-black">₹{parseFloat(selectedInvoice.invoiceTotal || "0").toLocaleString("en-IN")}</span>
+              <div className="card p-5 space-y-4">
+                <div className="flex justify-between items-center border-b border-blue-light pb-4">
+                  <span className="section-label">Receivable</span>
+                  <span className="fin-num text-3xl text-blue-ink">{formatINR(selectedInvoice.invoiceTotal)}</span>
                 </div>
-                {selectedInvoice.poReference && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400 font-bold uppercase">PO Ref</span>
-                    <span className="font-bold">{selectedInvoice.poReference}</span>
+                {[
+                  { label: "Taxable Amount", value: formatINR(selectedInvoice.taxableAmount) },
+                  { label: "Total GST",      value: formatINR(selectedInvoice.totalGst), accent: true },
+                  { label: "CGST",           value: formatINR(selectedInvoice.cgstAmount) },
+                  { label: "SGST",           value: formatINR(selectedInvoice.sgstAmount) },
+                  { label: "IGST",           value: formatINR(selectedInvoice.igstAmount) },
+                ].filter(r => r.value !== formatINR(0)).map(({ label, value, accent }) => (
+                  <div key={label} className="flex justify-between text-sm">
+                    <span className="text-blue-mid font-medium">{label}</span>
+                    <span className={cn("font-bold text-blue-ink", accent && "text-green-600")}>{value}</span>
                   </div>
-                )}
-                {selectedInvoice.customerGstin && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400 font-bold uppercase">Customer GSTIN</span>
-                    <span className="font-mono font-bold">{selectedInvoice.customerGstin}</span>
-                  </div>
-                )}
+                ))}
               </div>
 
-              <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all" onClick={() => setSelectedInvoice(null)}>Close</button>
+              <div className="pb-safe">
+                <button
+                  onClick={() => { updateMutation.mutate({ id: selectedInvoice.id, status: "processed" }); toast.success("Marked as paid"); setSelectedInvoice(null); }}
+                  className="btn-primary"
+                >
+                  Mark as Received
+                </button>
+              </div>
             </div>
           )}
         </DrawerContent>
       </Drawer>
 
-      {/* Scanner Drawer */}
+      {/* Scanner */}
       <Drawer open={showScanDrawer} onOpenChange={setShowScanDrawer}>
-        <DrawerContent className="max-h-[90dvh] bg-white rounded-t-[2.5rem]">
+        <DrawerContent className="max-h-[92dvh] bg-white border-blue-mid/10 rounded-t-[2.5rem]">
           <div className="p-6 overflow-y-auto no-scrollbar pb-safe">
-            <DocumentExtractor
-              docTypeHint="TAX_INVOICE"
-              onExtract={handleExtract}
-              onCancel={() => setShowScanDrawer(false)}
-            />
+            <DocumentExtractor docTypeHint="TAX_INVOICE" onExtract={handleExtract} onCancel={() => setShowScanDrawer(false)} />
           </div>
         </DrawerContent>
       </Drawer>
