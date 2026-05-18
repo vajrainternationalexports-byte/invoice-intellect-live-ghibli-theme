@@ -348,24 +348,94 @@ export class MemStorage implements IStorage {
       id: "si1",
       invoiceNo: "IES/24-25/001",
       invoiceDate: "2026-05-14",
-      customerName: "Reliance Infra",
-      customerGstin: "19RELIA1234A1Z1",
+      financialYear: "2026-2027",
+      customerName: "Reliance Infra Projects Ltd",
+      customerGstin: "27RELIA1234A1Z1",
       customerId: null,
       taxableAmount: "754237.29",
       totalGst: "135762.71",
       invoiceTotal: "890000.00",
-      cgstAmount: "67881.35",
-      sgstAmount: "67881.36",
+      cgstAmount: "0.00",
+      sgstAmount: "0.00",
+      igstAmount: "135762.71",
+      supplyType: "Interstate",
+      irnNumber: "IRN-IES-2026-05-0001",
+      isEInvoice: true,
+      status: "processed",
+      poReference: "RIL-PO-4820",
+      lineItems: [
+        { item: "Hot Dip Galvanised Cable Trays 300x100mm", qty: 500, unit: "Mtr", hsn: "7308", rate: "1508.47", discount: 0, taxableValue: 754237.29, cgstRate: 0, cgstAmount: 0, sgstRate: 0, sgstAmount: 0, igstRate: 18, igstAmount: 135762.71, total: 890000.00, batchNo: "B-IES-501", serialNo: "SN-8001", weight: 4200, warehouse: "Kolkata Works W1", project: "Reliance Jamnagar Ph-3", costCenter: "IES-SALES" }
+      ],
+      rawData: {
+        buyer: {
+          name: "Reliance Infra Projects Ltd",
+          gstin: "27RELIA1234A1Z1",
+          address: "Maker Chambers IV, 3rd Floor, Nariman Point, Mumbai - 400021",
+          state: "Maharashtra",
+          state_code: "27",
+          phone: "+91 9820456789",
+          email: "procurement@relianceinfra.com"
+        }
+      },
+      dueDate: "2026-06-13",
+      acknowledgementStatus: "acknowledged",
+      uploadedBy: "Admin User",
+      ocrConfidence: 100,
+      tcsApplicable: true,
+      paymentMode: "RTGS",
+      dispatchStatus: "fully_dispatched",
+      branchLocation: "Kolkata Works W1",
+      pendingDays: 0,
+      tcsCollected: "890.00",
+      disputeReason: null,
+      createdAt: new Date()
+    });
+
+    this.salesInvoices.set("si2", {
+      id: "si2",
+      invoiceNo: "IES/24-25/002",
+      invoiceDate: "2026-05-16",
+      financialYear: "2026-2027",
+      customerName: "Tata Projects Limited",
+      customerGstin: "19TATAP5678B1Z3",
+      customerId: null,
+      taxableAmount: "423728.81",
+      totalGst: "76271.19",
+      invoiceTotal: "500000.00",
+      cgstAmount: "38135.59",
+      sgstAmount: "38135.60",
       igstAmount: "0.00",
       supplyType: "Intrastate",
       irnNumber: null,
-      isEInvoice: true,
-      status: "pending",
-      lineItems: [],
-      poReference: null,
-      createdAt: new Date(),
-      rawData: null,
-      financialYear: "2026-2027",
+      isEInvoice: false,
+      status: "needs_review",
+      poReference: "TATA-PO-9102",
+      lineItems: [
+        { item: "Perforated Cable Trays 200x50mm", qty: 1200, unit: "Mtr", hsn: "7308", rate: "353.11", discount: 0, taxableValue: 423728.81, cgstRate: 9, cgstAmount: 38135.59, sgstRate: 9, sgstAmount: 38135.60, igstRate: 0, igstAmount: 0, total: 500000.00, batchNo: "B-IES-502", serialNo: "SN-8002", weight: 3600, warehouse: "Howrah Works W2", project: "Tata Steel Kalinganagar", costCenter: "IES-SALES" }
+      ],
+      rawData: {
+        buyer: {
+          name: "Tata Projects Limited",
+          gstin: "19TATAP5678B1Z3",
+          address: "One Forbes, Dr. V.B. Gandhi Marg, Fort, Mumbai - 400001",
+          state: "West Bengal",
+          state_code: "19",
+          phone: "+91 9831567890",
+          email: "orders@tataprojects.com"
+        }
+      },
+      dueDate: "2026-06-15",
+      acknowledgementStatus: "pending",
+      uploadedBy: "Admin User",
+      ocrConfidence: 96,
+      tcsApplicable: false,
+      paymentMode: "NEFT",
+      dispatchStatus: "pending_dispatch",
+      branchLocation: "Howrah Works W2",
+      pendingDays: 4,
+      tcsCollected: "0.00",
+      disputeReason: null,
+      createdAt: new Date()
     });
 
     // Seed Job Work Entries

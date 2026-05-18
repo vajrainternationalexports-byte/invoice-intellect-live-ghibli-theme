@@ -104,6 +104,20 @@ export const salesInvoices = pgTable("sales_invoices", {
   status: text("status").notNull().default("pending"),
   lineItems: jsonb("line_items"),
   rawData: jsonb("raw_data"),
+
+  // Enterprise Sales Additions
+  dueDate: text("due_date"),
+  acknowledgementStatus: text("acknowledgement_status").default("pending"),
+  uploadedBy: text("uploaded_by").default("System"),
+  ocrConfidence: integer("ocr_confidence").default(100),
+  tcsApplicable: boolean("tcs_applicable").default(false),
+  paymentMode: text("payment_mode").default("NEFT"),
+  dispatchStatus: text("dispatch_status").default("pending_dispatch"), // pending_dispatch, partially_dispatched, fully_dispatched, returned
+  branchLocation: text("branch_location").default("Kolkata Works W1"),
+  pendingDays: integer("pending_days").default(0),
+  tcsCollected: numeric("tcs_collected", { precision: 14, scale: 2 }).default("0.00"),
+  disputeReason: text("dispute_reason"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

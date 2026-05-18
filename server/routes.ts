@@ -457,21 +457,166 @@ export async function registerRoutes(
   app.get("/api/sales-invoices", async (_req, res) => {
     res.json(await storage.listSalesInvoices());
   });
+
   app.get("/api/sales-invoices/:id", async (req, res) => {
     const inv = await storage.getSalesInvoice(req.params.id);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
     res.json(inv);
   });
+
   app.post("/api/sales-invoices", async (req, res) => {
-    const parsed = insertSalesInvoiceSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    res.status(201).json(await storage.createSalesInvoice(parsed.data));
+    try {
+      const body = { ...req.body };
+      
+      // 1. Validate GSTIN Format if present
+      if (body.customerGstin) {
+        const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        if (!gstinRegex.test(body.customerGstin)) {
+          body.status = "needs_review";
+          body.disputeReason = "Invalid GSTIN format detected";
+        }
+      }
+
+      // 2. State-code based supply type auto-detection (IES is West Bengal: code 19)
+      if (body.customerGstin) {
+        const stateCode = body.customerGstin.slice(0, 2);
+        if (stateCode === "19") {
+          body.supplyType = "Intrastate";
+          const totalGst = parseFloat(body.totalGst || "0");
+          if (totalGst > 0 && parseFloat(body.igstAmount || "0") > 0) {
+            body.status = "needs_review";
+            body.disputeReason = "Tax conflict: Interstate tax (IGST) coexisting with Intrastate supply";
+          }
+          if (parseFloat(body.cgstAmount || "0") === 0 && parseFloat(body.sgstAmount || "0") === 0) {
+            body.cgstAmount = String((totalGst / 2).toFixed(2));
+            body.sgstAmount = String((totalGst / 2).toFixed(2));
+            body.igstAmount = "0.00";
+          }
+        } else {
+          body.supplyType = "Interstate";
+          const totalGst = parseFloat(body.totalGst || "0");
+          if (totalGst > 0 && (parseFloat(body.cgstAmount || "0") > 0 || parseFloat(body.sgstAmount || "0") > 0)) {
+            body.status = "needs_review";
+            body.disputeReason = "Tax conflict: Intrastate taxes (CGST/SGST) coexisting with Interstate supply";
+          }
+          if (parseFloat(body.igstAmount || "0") === 0) {
+            body.igstAmount = String(totalGst.toFixed(2));
+            body.cgstAmount = "0.00";
+            body.sgstAmount = "0.00";
+          }
+        }
+      }
+
+      // 3. Duplicate Invoice Detection
+      const allInvoices = await storage.listSalesInvoices();
+      const isDuplicate = allInvoices.some((inv: any) => 
+        inv.invoiceNo.toLowerCase().trim() === (body.invoiceNo || "").toLowerCase().trim() &&
+        inv.customerName?.toLowerCase().trim() === (body.customerName || "").toLowerCase().trim()
+      );
+      if (isDuplicate) {
+        body.status = "needs_review";
+        body.disputeReason = "Potential duplicate sales invoice detected (matching number and customer name)";
+      }
+
+      // 4. TCS Section 206C(1H) Threshold check & collection
+      // If single customer annual sales exceed ₹50 Lakh (5,000,000)
+      if (body.customerId) {
+        const customerInvoices = allInvoices.filter((inv: any) => inv.customerId === body.customerId);
+        const ytdTotal = customerInvoices.reduce((sum: number, inv: any) => sum + parseFloat(inv.invoiceTotal || "0"), 0);
+        const currentTotal = parseFloat(body.invoiceTotal || "0");
+        const threshold = 5000000; // ₹50 Lakhs
+        
+        if (ytdTotal + currentTotal > threshold) {
+          body.tcsApplicable = true;
+          const currentTaxable = parseFloat(body.taxableAmount || "0");
+          // TCS under 206C(1H) is 0.075% or 0.1%. Let's use 0.1% standard.
+          const rate = 0.001; 
+          const calculatedTcs = currentTaxable * rate;
+          body.tcsCollected = String(calculatedTcs.toFixed(2));
+        }
+      }
+
+      // 5. OCR Confidence Gating
+      const confidence = body.ocrConfidence ?? 100;
+      if (confidence < 90) {
+        body.status = "needs_review";
+        body.disputeReason = (body.disputeReason ? body.disputeReason + " | " : "") + `OCR confidence score low (${confidence}%)`;
+      }
+
+      // 6. Default net 30 payment terms due-date math
+      if (body.invoiceDate && !body.dueDate) {
+        const d = new Date(body.invoiceDate);
+        d.setDate(d.getDate() + 30);
+        body.dueDate = d.toISOString().split("T")[0];
+      }
+
+      const parsed = insertSalesInvoiceSchema.safeParse(body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      
+      const created = await storage.createSalesInvoice(parsed.data);
+
+      // Audit and Logs
+      await storage.createOcrLog({
+        filename: body.filename || `${body.invoiceNo}.pdf`,
+        docType: "TAX_INVOICE",
+        rawText: body.rawText || `Extracted sales invoice ${body.invoiceNo}`,
+        extractedJson: created,
+        confidenceScore: confidence,
+        verificationStatus: created.status === "needs_review" ? "manual_corrected" : "auto_approved"
+      });
+
+      await storage.createApprovalLog({
+        documentType: "sales_invoice",
+        documentId: created.id,
+        action: created.status === "needs_review" ? "submit_for_review" : "auto_processed",
+        actor: body.uploadedBy || "System",
+        comments: created.disputeReason || "Sales invoice uploaded and processed successfully"
+      });
+
+      await storage.createAuditLog({
+        actionType: "CREATE",
+        entityName: "sales_invoices",
+        entityId: created.id,
+        details: { invoiceNo: created.invoiceNo, total: created.invoiceTotal, status: created.status },
+        actor: body.uploadedBy || "System"
+      });
+
+      res.status(201).json(created);
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.message });
+    }
   });
+
   app.patch("/api/sales-invoices/:id", async (req, res) => {
+    const original = await storage.getSalesInvoice(req.params.id);
+    if (!original) return res.status(404).json({ error: "Invoice not found" });
+
     const inv = await storage.updateSalesInvoice(req.params.id, req.body);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
+
+    // Track status change approvals
+    if (req.body.status && req.body.status !== original.status) {
+      await storage.createApprovalLog({
+        documentType: "sales_invoice",
+        documentId: inv.id,
+        action: req.body.status === "approved" ? "approve" : req.body.status === "processed" ? "receive_payment" : "update",
+        actor: req.body.updatedBy || "System",
+        comments: req.body.comments || `Status updated from ${original.status} to ${inv.status}`
+      });
+
+      await storage.createAuditLog({
+        actionType: "UPDATE",
+        entityName: "sales_invoices",
+        entityId: inv.id,
+        details: { previousStatus: original.status, newStatus: inv.status, comments: req.body.comments },
+        actor: req.body.updatedBy || "System"
+      });
+    }
+
     res.json(inv);
   });
+
   app.delete("/api/sales-invoices/:id", async (req, res) => {
     await storage.deleteSalesInvoice(req.params.id);
     res.status(204).send();
