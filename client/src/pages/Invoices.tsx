@@ -54,8 +54,8 @@ export default function Purchases() {
   const [filterPaid, setFilterPaid] = useState("all");
   const [filterItem, setFilterItem] = useState("");
 
-  // Pinned Filters (Users select exactly 4 filters to be permanently shown on dashboard)
-  const [pinnedFilters, setPinnedFilters] = useState<string[]>(["location", "tds", "seller", "status"]);
+  // Pinned Filters (Users select exactly 3 filters to be permanently shown on dashboard)
+  const [pinnedFilters, setPinnedFilters] = useState<string[]>(["location", "tds", "seller"]);
 
   // Manual Inputs inside Detail Drawer
   const [localPaymentTerms, setLocalPaymentTerms] = useState("");
@@ -742,8 +742,8 @@ export default function Purchases() {
                     setPinnedFilters(pinnedFilters.filter(p => p !== fId));
                   } else {
                     const updated = [...pinnedFilters, fId];
-                    if (updated.length > 4) {
-                      updated.shift(); // keep exactly up to 4 pinned
+                    if (updated.length > 3) {
+                      updated.shift(); // keep exactly up to 3 pinned
                     }
                     setPinnedFilters(updated);
                   }
