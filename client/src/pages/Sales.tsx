@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
   Camera, FileUp, Search, FileDown, X, Receipt, Filter, 
   AlertTriangle, CheckCircle2, Clock, Calendar, ShieldCheck, 
   Building, User, Percent, HelpCircle, ArrowRight, Play, Eye, EyeOff,
-  Pin, Loader2, Trash2, Check, Share2, Users
+  Pin, Loader2, Trash2, Check, Share2, Users, ChevronUp, ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -65,6 +65,12 @@ export default function Sales() {
   const [localVehicleNumber, setLocalVehicleNumber] = useState("");
   const [localEWayBill, setLocalEWayBill] = useState("");
 
+  // Ledger compliance states inside Detail Drawer
+  const [localAmountInBank, setLocalAmountInBank] = useState("");
+  const [localInstRxilCharges, setLocalInstRxilCharges] = useState("");
+  const [localOrderStatus, setLocalOrderStatus] = useState("");
+  const [localDateAsOn, setLocalDateAsOn] = useState("");
+
   // Maker-Checker & Payments states
   const [selectedDispatchStatus, setSelectedDispatchStatus] = useState("");
   const [disputeReasonText, setDisputeReasonText] = useState("");
@@ -73,6 +79,34 @@ export default function Sales() {
   // Multi-Select & Bulk Actions (Long Press activation)
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
   const isSelectionMode = selectedInvoiceIds.length > 0;
+
+  // View Mode & Ledger Sorting
+  const [viewMode, setViewMode] = useState<"ledger" | "card">("ledger");
+  const [sortField, setSortField] = useState<string>("slNo");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const handleSelectInvoice = (inv: any) => {
+    setSelectedInvoice(inv);
+    setLocalPaymentTerms(inv.paymentMode || "");
+    setLocalVehicleNumber(inv.rawData?.vehicleNumber || "");
+    setLocalEWayBill(inv.rawData?.eWayBill || "");
+    setSelectedDispatchStatus(inv.dispatchStatus || "pending_dispatch");
+    
+    // Spreadsheet ledger compliance specs
+    setLocalAmountInBank(inv.amountInBank || "0.00");
+    setLocalInstRxilCharges(inv.instRxilCharges || "0.00");
+    setLocalOrderStatus(inv.orderStatus || "RUNNING");
+    setLocalDateAsOn(inv.dateAsOn || "");
+  };
 
   const toggleInvoiceSelection = (id: number) => {
     setSelectedInvoiceIds(prev => 
@@ -209,13 +243,24 @@ export default function Sales() {
     const total = taxable + gst;
     const isInterstate = customer.gstin.slice(0, 2) !== "19";
 
+    const mockProject = ["Singrauli Project", "Hazira Site", "IOCL Vadodara", "Khadava- Plot 14"][Math.floor(Math.random() * 4)];
+    const mockSlNo = `${Math.floor(Math.random() * 50) + 10}/25-26`;
+    const mockPoNumber = `LE/IES/${Math.floor(Math.random() * 1000)}/25-26`;
+    const mockVehicle = "WB-" + (Math.floor(Math.random() * 90) + 10) + "-Y-" + (Math.floor(Math.random() * 9000) + 1000);
+    const mockEway = String(Math.floor(100000000000 + Math.random() * 900000000000));
+
     return {
       invoice_no: `IES/26-27/${Math.floor(1000 + Math.random() * 9000)}`,
       invoice_date: format(new Date(), "yyyy-MM-dd"),
       financial_year: "2026-2027",
-      po_reference: `PO-CLIENT-${Math.floor(100 + Math.random() * 900)}`,
+      po_reference: mockPoNumber,
       customerGstin: customer.gstin,
       customerName: customer.name,
+      slNo: mockSlNo,
+      poNumber: mockPoNumber,
+      project: mockProject,
+      vehicleNumber: mockVehicle,
+      eWayBill: mockEway,
       buyer: {
         name: customer.name,
         gstin: customer.gstin,
@@ -241,7 +286,7 @@ export default function Sales() {
           serialNo: "SN-99824",
           weight: 480,
           warehouse: "Kolkata Works W1",
-          project: "Ezra Project",
+          project: mockProject,
           costCenter: "IES-SALES",
         }
       ],
@@ -330,8 +375,21 @@ export default function Sales() {
                 rawData: {
                   ...ocrData,
                   fileBase64: uploadedBase64,
-                  processingStage: "Complete!"
-                }
+                  processingStage: "Complete!",
+                  vehicleNumber: ocrData.vehicleNumber,
+                  eWayBill: ocrData.eWayBill
+                },
+                slNo: ocrData.slNo,
+                poNumber: ocrData.poNumber,
+                project: ocrData.project,
+                amountIncGst: String(ocrData.totals.invoice_total),
+                duePayment: String(ocrData.totals.invoice_total),
+                amountInBank: "0.00",
+                balance: String(ocrData.totals.invoice_total),
+                dateAsOn: ocrData.invoice_date,
+                instRxilCharges: "0.00",
+                balanceShortage: String(ocrData.totals.invoice_total),
+                orderStatus: "RUNNING"
               };
 
               try {
@@ -376,7 +434,22 @@ export default function Sales() {
       dispatchStatus: "pending_dispatch",
       branchLocation: "Kolkata Works W1",
       uploadedBy: "Admin User",
-      rawData: data
+      rawData: {
+        ...data,
+        vehicleNumber: data.vehicle_number || data.vehicle || "Not Applicable",
+        eWayBill: data.e_way_bill_no || data.eway_bill || "Not Applicable"
+      },
+      slNo: data.sl_no || data.slNo || `${Math.floor(Math.random() * 100) + 1}/25-26`,
+      poNumber: data.po_number || data.poNumber || `IES-PO-${Math.floor(Math.random() * 10000)}`,
+      project: data.project || data.ship_to?.site_name || data.line_items?.[0]?.project || "IES Factory Site",
+      amountIncGst: String(data.totals?.invoice_total ?? "0"),
+      duePayment: String(data.totals?.invoice_total ?? "0"),
+      amountInBank: "0.00",
+      balance: String(data.totals?.invoice_total ?? "0"),
+      dateAsOn: data.invoice_date || format(new Date(), "yyyy-MM-dd"),
+      instRxilCharges: "0.00",
+      balanceShortage: String(data.totals?.invoice_total ?? "0"),
+      orderStatus: "RUNNING"
     };
 
     try {
@@ -388,89 +461,110 @@ export default function Sales() {
     }
   };
 
-  // Stacked Filters Logic
-  const filtered = invoices.filter((inv: any) => {
-    // 1. Text search
-    const q = search.toLowerCase().trim();
-    if (q) {
-      const match = 
-        (inv.invoiceNo || "").toLowerCase().includes(q) ||
-        (inv.customerName || "").toLowerCase().includes(q) ||
-        (inv.customerGstin || "").toLowerCase().includes(q) ||
-        (inv.branchLocation || "").toLowerCase().includes(q);
-      if (!match) return false;
-    }
-
-    // 2. Tabs gating
-    if (makerCheckerEnabled) {
-      if (activeTab === "needs_review" && inv.status !== "needs_review") return false;
-      if (activeTab === "pending" && inv.status !== "pending" && inv.status !== "approved") return false;
-      if (activeTab === "processed" && inv.status !== "processed") return false;
-    } else {
-      if (activeTab === "needs_review" && inv.status !== "needs_review") return false;
-      if (activeTab === "pending" && inv.status !== "pending") return false;
-      if (activeTab === "processed" && inv.status !== "processed") return false;
-    }
-
-    // 3. Dispatch Note Filter
-    if (filterDispatch !== "all") {
-      if (inv.dispatchStatus !== filterDispatch) return false;
-    }
-
-    // 4. Branch Location
-    if (filterBranch !== "all") {
-      if (inv.branchLocation !== filterBranch) return false;
-    }
-
-    // 5. OCR Gating
-    if (filterOcr !== "all") {
-      const conf = inv.ocrConfidence ?? 100;
-      if (filterOcr === "low" && conf >= 90) return false;
-      if (filterOcr === "high" && conf < 90) return false;
-    }
-
-    // 6. TCS Gating
-    if (filterTcs !== "all") {
-      const hasTcs = parseFloat(inv.tcsCollected || "0") > 0 || !!inv.tcsApplicable;
-      if (filterTcs === "yes" && !hasTcs) return false;
-      if (filterTcs === "no" && hasTcs) return false;
-    }
-
-    // 7. Customer dropdown
-    if (filterCustomer !== "all") {
-      if (inv.customerName !== filterCustomer) return false;
-    }
-
-    // 8. Date Month & Year
-    if (filterMonth !== "all" || filterYear !== "all") {
-      const dateParts = (inv.invoiceDate || "").split("-");
-      if (dateParts.length >= 3) {
-        const y = dateParts[0];
-        const m = dateParts[1];
-        if (filterMonth !== "all" && m !== filterMonth) return false;
-        if (filterYear !== "all" && y !== filterYear) return false;
-      } else {
-        return false;
+  // Stacked Filters Logic + Sorting
+  const sortedAndFiltered = useMemo(() => {
+    const res = invoices.filter((inv: any) => {
+      // 1. Text search
+      const q = search.toLowerCase().trim();
+      if (q) {
+        const match = 
+          (inv.invoiceNo || "").toLowerCase().includes(q) ||
+          (inv.customerName || "").toLowerCase().includes(q) ||
+          (inv.customerGstin || "").toLowerCase().includes(q) ||
+          (inv.branchLocation || "").toLowerCase().includes(q);
+        if (!match) return false;
       }
-    }
 
-    // 9. Paid Gating
-    if (filterPaid !== "all") {
-      const isPaid = inv.status === "processed";
-      if (filterPaid === "paid" && !isPaid) return false;
-      if (filterPaid === "unpaid" && isPaid) return false;
-    }
+      // 2. Tabs gating
+      if (makerCheckerEnabled) {
+        if (activeTab === "needs_review" && inv.status !== "needs_review") return false;
+        if (activeTab === "pending" && inv.status !== "pending" && inv.status !== "approved") return false;
+        if (activeTab === "processed" && inv.status !== "processed") return false;
+      } else {
+        if (activeTab === "needs_review" && inv.status !== "needs_review") return false;
+        if (activeTab === "pending" && inv.status !== "pending") return false;
+        if (activeTab === "processed" && inv.status !== "processed") return false;
+      }
 
-    // 10. Item matching
-    if (filterItem.trim()) {
-      const match = (inv.lineItems || []).some((li: any) => 
-        (li.item || li.description || "").toLowerCase().includes(filterItem.toLowerCase())
-      );
-      if (!match) return false;
-    }
+      // 3. Dispatch Note Filter
+      if (filterDispatch !== "all") {
+        if (inv.dispatchStatus !== filterDispatch) return false;
+      }
 
-    return true;
-  });
+      // 4. Branch Location
+      if (filterBranch !== "all") {
+        if (inv.branchLocation !== filterBranch) return false;
+      }
+
+      // 5. OCR Gating
+      if (filterOcr !== "all") {
+        const conf = inv.ocrConfidence ?? 100;
+        if (filterOcr === "low" && conf >= 90) return false;
+        if (filterOcr === "high" && conf < 90) return false;
+      }
+
+      // 6. TCS Gating
+      if (filterTcs !== "all") {
+        const hasTcs = parseFloat(inv.tcsCollected || "0") > 0 || !!inv.tcsApplicable;
+        if (filterTcs === "yes" && !hasTcs) return false;
+        if (filterTcs === "no" && hasTcs) return false;
+      }
+
+      // 7. Customer dropdown
+      if (filterCustomer !== "all") {
+        if (inv.customerName !== filterCustomer) return false;
+      }
+
+      // 8. Date Month & Year
+      if (filterMonth !== "all" || filterYear !== "all") {
+        const dateParts = (inv.invoiceDate || "").split("-");
+        if (dateParts.length >= 3) {
+          const y = dateParts[0];
+          const m = dateParts[1];
+          if (filterMonth !== "all" && m !== filterMonth) return false;
+          if (filterYear !== "all" && y !== filterYear) return false;
+        } else {
+          return false;
+        }
+      }
+
+      // 9. Paid Gating
+      if (filterPaid !== "all") {
+        const isPaid = inv.status === "processed";
+        if (filterPaid === "paid" && !isPaid) return false;
+        if (filterPaid === "unpaid" && isPaid) return false;
+      }
+
+      // 10. Item matching
+      if (filterItem.trim()) {
+        const match = (inv.lineItems || []).some((li: any) => 
+          (li.item || li.description || "").toLowerCase().includes(filterItem.toLowerCase())
+        );
+        if (!match) return false;
+      }
+
+      return true;
+    });
+
+    // Sort result
+    return [...res].sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      // Handle numerical parsing
+      if (["amountIncGst", "duePayment", "invoiceTotal", "amountInBank", "balance", "taxableAmount", "tcsCollected", "totalGst", "instRxilCharges", "balanceShortage"].includes(sortField)) {
+        valA = parseFloat(valA || "0");
+        valB = parseFloat(valB || "0");
+      } else {
+        valA = String(valA || "").toLowerCase();
+        valB = String(valB || "").toLowerCase();
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [invoices, search, activeTab, filterDispatch, filterBranch, filterOcr, filterTcs, filterCustomer, filterMonth, filterYear, filterPaid, filterItem, sortField, sortOrder, makerCheckerEnabled]);
 
   // Calculate Metrics from raw invoices
   const totals = invoices.reduce((acc, inv) => {
@@ -878,13 +972,30 @@ export default function Sales() {
         )}
       </AnimatePresence>
 
-      {/* Tabs */}
-      <div className="tab-group">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)} className={cn("tab-item", activeTab === t.id && "active")}>
-            {t.label}
+      {/* Tabs & View Mode Switcher */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white/40 p-2.5 rounded-2xl border border-blue-mid/10">
+        <div className="tab-group md:w-auto w-full border-none p-0 bg-transparent">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} className={cn("tab-item", activeTab === t.id && "active")}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        
+        <div className="flex items-center gap-1 bg-blue-light/50 border border-blue-mid/10 p-1 rounded-xl self-end md:self-auto shrink-0 shadow-inner">
+          <button
+            onClick={() => setViewMode("ledger")}
+            className={cn("px-3 py-1 rounded-lg text-[9px] font-mono font-black uppercase tracking-wider transition-colors", viewMode === "ledger" ? "bg-blue-ink text-white" : "text-blue-mid hover:text-blue-ink")}
+          >
+            Excel Ledger
           </button>
-        ))}
+          <button
+            onClick={() => setViewMode("card")}
+            className={cn("px-3 py-1 rounded-lg text-[9px] font-mono font-black uppercase tracking-wider transition-colors", viewMode === "card" ? "bg-blue-ink text-white" : "text-blue-mid hover:text-blue-ink")}
+          >
+            Card Hub
+          </button>
+        </div>
       </div>
 
       {/* Invoices List */}
@@ -897,7 +1008,7 @@ export default function Sales() {
 
         {!isLoading && (
           <div className="space-y-3">
-            {filtered.length === 0 ? (
+            {sortedAndFiltered.length === 0 ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="flex flex-col items-center justify-center h-48 gap-3 text-blue-mid/30">
                 <div className="h-16 w-16 rounded-[2rem] bg-white/60 flex items-center justify-center border border-blue-mid/10">
@@ -905,116 +1016,269 @@ export default function Sales() {
                 </div>
                 <p className="text-xs font-bold uppercase tracking-widest font-mono">No Outward Sales Records Found</p>
               </motion.div>
-            ) : filtered.map((inv: any) => {
-              const isSelected = selectedInvoiceIds.includes(inv.id);
-              const isPaid = inv.status === "processed";
-
-              // Render intermediate processing stage card
-              if (inv.status === "processing") {
-                return (
-                  <motion.div
-                    key={inv.id}
-                    layoutId={`card-${inv.id}`}
-                    className="card border-blue-mid/20 p-4 flex items-center justify-between bg-blue-light/20 relative overflow-hidden"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="animate-spin text-blue-ink" size={18} />
-                      <div>
-                        <h4 className="text-xs font-mono font-black text-blue-ink uppercase">Processing Outward Invoices OCR...</h4>
-                        <p className="text-[9px] font-mono text-blue-mid tracking-wide mt-0.5">{inv.rawData?.processingStage || "Stage 1: Scanning Outward Tax Invoice"}</p>
-                      </div>
-                    </div>
-                    <span className="text-[8px] font-mono text-blue-mid/60 uppercase">{inv.rawData?.fileName || "outward.pdf"}</span>
-                  </motion.div>
-                );
-              }
-
-              return (
-                <div key={inv.id} className="relative select-none">
-                  {/* Swipe-to-delete Trash absolute background */}
-                  <div className="absolute inset-0 bg-[#8d2a2a] rounded-[1.5rem] flex items-center justify-end px-6 text-white border border-[#8d2a2a]/20">
-                    <div className="flex items-center gap-2">
-                      <Trash2 size={16} />
-                      <span className="text-[9px] font-mono uppercase font-black">Drag to Delete</span>
-                    </div>
-                  </div>
-
-                  <motion.div
-                    drag="x"
-                    dragConstraints={{ left: -120, right: 0 }}
-                    dragElastic={0.1}
-                    onDragEnd={(e, info) => handleDragEnd(e, info, inv.id)}
-                    onClick={() => {
-                      if (isSelectionMode) {
-                        toggleInvoiceSelection(inv.id);
-                      } else {
-                        setSelectedInvoice(inv);
-                        setLocalPaymentTerms(inv.paymentMode || "");
-                        setLocalVehicleNumber(inv.rawData?.vehicleNumber || "");
-                        setLocalEWayBill(inv.rawData?.eWayBill || "");
-                        setSelectedDispatchStatus(inv.dispatchStatus || "pending_dispatch");
+            ) : viewMode === "ledger" ? (
+              <div className="overflow-x-auto border border-blue-mid/15 rounded-2xl bg-white shadow-sm font-mono text-[9px] w-full no-scrollbar">
+                <table className="w-full text-left border-collapse min-w-[1700px]">
+                  <thead>
+                    <tr className="bg-blue-light/60 border-b border-blue-mid/15 uppercase text-blue-mid font-black select-none sticky top-0 z-10">
+                      {[
+                        { field: "slNo", label: "SL No." },
+                        { field: "poNumber", label: "PO Number" },
+                        { field: "customerName", label: "Particulars" },
+                        { field: "project", label: "Project" },
+                        { field: "amountIncGst", label: "Amount (Inc GST)" },
+                        { field: "duePayment", label: "Due Payment" },
+                        { field: "invoiceNo", label: "Invoice No." },
+                        { field: "invoiceDate", label: "Invoice Date" },
+                        { field: "invoiceTotal", label: "Invoice AMT (Inc GST)" },
+                        { field: "amountInBank", label: "Amount in Bank" },
+                        { field: "balance", label: "Balance" },
+                        { field: "dateAsOn", label: "Date (As on)" },
+                        { field: "taxableAmount", label: "Basic" },
+                        { field: "tcsCollected", label: "TCS (2.1%)" },
+                        { field: "totalGst", label: "GST" },
+                        { field: "instRxilCharges", label: "Deductions / RXIL / Shortage" },
+                        { field: "balanceShortage", label: "Balance - Shortage" },
+                        { field: "orderStatus", label: "Order Status" }
+                      ].map(col => {
+                        const isSorted = sortField === col.field;
+                        return (
+                          <th 
+                            key={col.field}
+                            onClick={() => handleSort(col.field)}
+                            className="p-3 cursor-pointer hover:bg-blue-light border-r border-blue-mid/10 transition-colors"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>{col.label}</span>
+                              {isSorted && (
+                                sortOrder === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-blue-mid/10 text-blue-ink">
+                    {sortedAndFiltered.map((inv: any) => {
+                      const isSelected = selectedInvoiceIds.includes(inv.id);
+                      const isPaid = inv.status === "processed";
+                      
+                      // Determine status color background highlight matching the spreadsheet colors
+                      let rowBg = "bg-white";
+                      if (inv.orderStatus === "RUNNING") {
+                        rowBg = "bg-[#fef9c3]/30 hover:bg-[#fef9c3]/50"; // soft yellow for RUNNING
+                      } else if (inv.orderStatus === "CLOSED") {
+                        rowBg = "bg-[#fee2e2]/40 hover:bg-[#fee2e2]/60"; // soft red for CLOSED
+                      } else if (inv.orderStatus === "COMPLETE") {
+                        rowBg = "bg-[#dcfce7]/30 hover:bg-[#dcfce7]/50"; // soft green for COMPLETE
                       }
-                    }}
-                    onDoubleClick={(e) => {
-                      e.preventDefault();
-                      toggleInvoiceSelection(inv.id);
-                    }}
-                    style={{ x: swipedCardId === inv.id ? -120 : 0 }}
-                    className={cn(
-                      "card p-4 flex items-center justify-between cursor-pointer bg-white relative transition-colors duration-150 active:bg-blue-light/30 select-none touch-none",
-                      isSelected && "border-blue-ink bg-blue-light/20",
-                      inv.status === "needs_review" && "border-red-400 bg-red-50/20"
-                    )}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {isSelectionMode ? (
-                        <div className={cn("w-4 h-4 rounded border flex items-center justify-center transition-colors", isSelected ? "border-blue-ink bg-blue-ink text-white" : "border-blue-mid/30 bg-white")}>
-                          {isSelected && <Check size={10} strokeWidth={4} />}
-                        </div>
-                      ) : (
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border",
-                          isPaid ? "bg-green-50 border-green-200 text-green-700" : 
-                          inv.status === "needs_review" ? "bg-red-50 border-red-200 text-red-700" :
-                          "bg-blue-light border-blue-mid/10 text-blue-ink"
-                        )}>
-                          <Receipt size={18} />
-                        </div>
-                      )}
+                      if (isSelected) {
+                        rowBg = "bg-blue-light/40 hover:bg-blue-light/50 font-bold border-l-4 border-blue-ink";
+                      }
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-mono font-black text-blue-ink text-xs uppercase truncate max-w-[150px]">{inv.customerName}</h3>
-                          {inv.isEInvoice && <span className="text-[7px] font-mono font-black tracking-widest text-green-700 bg-green-50 border border-green-200 px-1 rounded-sm">E-INV</span>}
+                      return (
+                        <tr 
+                          key={inv.id} 
+                          onClick={(e) => {
+                            if (e.shiftKey || isSelectionMode) {
+                              toggleInvoiceSelection(inv.id);
+                            } else {
+                              handleSelectInvoice(inv);
+                            }
+                          }}
+                          className={cn(rowBg, "cursor-pointer transition-colors font-bold border-r border-blue-mid/10")}
+                        >
+                          <td className="p-3 font-mono border-r border-blue-mid/10">{inv.slNo || "—"}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 truncate max-w-[150px]" title={inv.poNumber}>{inv.poNumber || "—"}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 uppercase font-black truncate max-w-[150px]">{inv.customerName}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 uppercase truncate max-w-[120px]">{inv.project || "—"}</td>
+                          
+                          {/* Financial values aligned right */}
+                          <td className={cn("p-3 font-mono border-r border-blue-mid/10 text-right font-black", parseFloat(inv.amountIncGst || "0") < 0 && "text-red-700")}>
+                            {formatINR(inv.amountIncGst || 0)}
+                          </td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-orange-700">{formatINR(inv.duePayment || 0)}</td>
+                          
+                          <td className="p-3 font-mono border-r border-blue-mid/10 font-black">{inv.invoiceNo}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10">{formatDate(inv.invoiceDate)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right font-black">{formatINR(inv.invoiceTotal || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-green-700">{formatINR(inv.amountInBank || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-orange-700">{formatINR(inv.balance || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10">{inv.dateAsOn || "—"}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-blue-mid">{formatINR(inv.taxableAmount || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-[#1a6b3c]">{formatINR(inv.tcsCollected || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-blue-mid">{formatINR(inv.totalGst || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right text-red-600">{formatINR(inv.instRxilCharges || 0)}</td>
+                          <td className="p-3 font-mono border-r border-blue-mid/10 text-right font-black text-[#544837]">{formatINR(inv.balanceShortage || 0)}</td>
+                          
+                          {/* Order Status Badge */}
+                          <td className="p-3 font-mono">
+                            {inv.orderStatus === "RUNNING" ? (
+                              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-yellow-400 text-black border border-yellow-600">
+                                ORDER RUNNING
+                              </span>
+                            ) : inv.orderStatus === "CLOSED" ? (
+                              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-red-600 text-white border border-red-800">
+                                ORDER CLOSED
+                              </span>
+                            ) : (
+                              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-green-600 text-white border border-green-800">
+                                ORDER COMPLETE
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sortedAndFiltered.map((inv: any) => {
+                  const isSelected = selectedInvoiceIds.includes(inv.id);
+                  const isPaid = inv.status === "processed";
+
+                  // Render intermediate processing stage card
+                  if (inv.status === "processing") {
+                    return (
+                      <motion.div
+                        key={inv.id}
+                        layoutId={`card-${inv.id}`}
+                        className="card border-blue-mid/20 p-4 flex items-center justify-between bg-blue-light/20 relative overflow-hidden"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="animate-spin text-blue-ink" size={18} />
+                          <div>
+                            <h4 className="text-xs font-mono font-black text-blue-ink uppercase">Processing Outward Invoices OCR...</h4>
+                            <p className="text-[9px] font-mono text-blue-mid tracking-wide mt-0.5">{inv.rawData?.processingStage || "Stage 1: Scanning Outward Tax Invoice"}</p>
+                          </div>
                         </div>
-                        <p className="text-[9px] font-mono text-blue-mid/70 mt-0.5">
-                          {inv.invoiceNo} · {formatDate(inv.invoiceDate)}
-                        </p>
+                        <span className="text-[8px] font-mono text-blue-mid/60 uppercase">{inv.rawData?.fileName || "outward.pdf"}</span>
+                      </motion.div>
+                    );
+                  }
+
+                  return (
+                    <div key={inv.id} className="relative select-none">
+                      {/* Swipe-to-delete Trash absolute background */}
+                      <div className="absolute inset-0 bg-[#8d2a2a] rounded-[1.5rem] flex items-center justify-end px-6 text-white border border-[#8d2a2a]/20">
+                        <div className="flex items-center gap-2">
+                          <Trash2 size={16} />
+                          <span className="text-[9px] font-mono uppercase font-black">Drag to Delete</span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="fin-num text-sm font-black text-blue-ink">{formatINR(inv.invoiceTotal)}</div>
-                      <div className="flex items-center justify-end gap-1 mt-0.5">
-                        {isPaid ? (
-                          <span className="text-[8px] font-mono uppercase font-black text-green-700 bg-green-50 border border-green-150 px-1.5 py-0.2 rounded-sm flex items-center gap-0.5">
-                            <CheckCircle2 size={8} /> Received
-                          </span>
-                        ) : inv.status === "needs_review" ? (
-                          <span className="text-[8px] font-mono uppercase font-black text-red-700 bg-red-50 border border-red-150 px-1.5 py-0.2 rounded-sm flex items-center gap-0.5">
-                            <AlertTriangle size={8} /> Needs Review
-                          </span>
-                        ) : (
-                          <span className="text-[8px] font-mono uppercase font-black text-blue-mid bg-blue-light border border-blue-mid/10 px-1.5 py-0.2 rounded-sm flex items-center gap-0.5">
-                            <Clock size={8} /> Outward Approved
-                          </span>
+                      <motion.div
+                        drag="x"
+                        dragConstraints={{ left: -120, right: 0 }}
+                        dragElastic={0.1}
+                        onDragEnd={(e, info) => handleDragEnd(e, info, inv.id)}
+                        onClick={() => {
+                          if (isSelectionMode) {
+                            toggleInvoiceSelection(inv.id);
+                          } else {
+                            handleSelectInvoice(inv);
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          toggleInvoiceSelection(inv.id);
+                        }}
+                        style={{ x: swipedCardId === inv.id ? -120 : 0 }}
+                        className={cn(
+                          "card p-4 flex items-center justify-between cursor-pointer bg-white relative transition-colors duration-150 active:bg-blue-light/30 select-none touch-none",
+                          isSelected && "border-blue-ink bg-blue-light/20",
+                          inv.status === "needs_review" && "border-red-400 bg-red-50/20"
                         )}
-                      </div>
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {isSelectionMode ? (
+                            <div className={cn("w-4 h-4 rounded border flex items-center justify-center transition-colors", isSelected ? "border-blue-ink bg-blue-ink text-white" : "border-blue-mid/30 bg-white")}>
+                              {isSelected && <Check size={10} strokeWidth={4} />}
+                            </div>
+                          ) : (
+                            <div className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border",
+                              isPaid ? "bg-green-50 border-green-200 text-green-700" : 
+                              inv.status === "needs_review" ? "bg-red-50 border-red-200 text-red-700" :
+                              "bg-blue-light border-blue-mid/10 text-blue-ink"
+                            )}>
+                              <Receipt size={18} />
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="font-mono font-black text-blue-ink text-xs uppercase truncate max-w-[150px]">{inv.customerName}</h3>
+                              {inv.isEInvoice && <span className="text-[7px] font-mono font-black tracking-widest text-green-700 bg-green-50 border border-green-200 px-1 rounded-sm">E-INV</span>}
+                            </div>
+                            <p className="text-[9px] font-mono text-blue-mid/70 mt-0.5">
+                              {inv.invoiceNo} · {formatDate(inv.invoiceDate)}
+                            </p>
+                            
+                            {/* High-Density Spreadsheet Metadata row */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[8px] font-mono">
+                              <span className="bg-blue-light text-blue-ink px-1 rounded-sm border border-blue-mid/10 font-bold">SL: {inv.slNo || "—"}</span>
+                              <span className="bg-blue-light text-blue-ink px-1 rounded-sm border border-blue-mid/10 font-bold">Proj: {inv.project || "—"}</span>
+                              <span className="text-blue-mid truncate max-w-[120px]">PO: {inv.poNumber || "—"}</span>
+                              
+                              {inv.orderStatus === "RUNNING" && (
+                                <span className="px-1 rounded-sm bg-yellow-100 text-yellow-800 border border-yellow-300 text-[7px] font-black">RUNNING</span>
+                              )}
+                              {inv.orderStatus === "CLOSED" && (
+                                <span className="px-1 rounded-sm bg-red-100 text-red-800 border border-red-300 text-[7px] font-black">CLOSED</span>
+                              )}
+                              {inv.orderStatus === "COMPLETE" && (
+                                <span className="px-1 rounded-sm bg-green-100 text-green-800 border border-green-300 text-[7px] font-black">COMPLETE</span>
+                              )}
+                              {(() => {
+                                const eway = inv.rawData?.eWayBill || inv.rawData?.eWayBillNumber;
+                                if (eway && eway.toLowerCase() !== "not applicable" && eway.toLowerCase() !== "n/a" && eway.trim() !== "") {
+                                  return (
+                                    <span className="bg-[#fee2e2]/60 text-red-700 px-1 rounded-sm border border-red-200/50 font-bold uppercase text-[7px]">E-Way: {eway}</span>
+                                  );
+                                }
+                                return null;
+                              })()}
+                              {(() => {
+                                const vehicle = inv.rawData?.vehicleNumber || inv.rawData?.vehicle;
+                                if (vehicle && vehicle.toLowerCase() !== "not applicable" && vehicle.toLowerCase() !== "n/a" && vehicle.trim() !== "") {
+                                  return (
+                                    <span className="bg-[#fee2e2]/60 text-red-700 px-1 rounded-sm border border-red-200/50 font-bold uppercase text-[7px]">Vehicle: {vehicle}</span>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="fin-num text-sm font-black text-blue-ink">{formatINR(inv.invoiceTotal)}</div>
+                          <div className="flex items-center justify-end gap-1 mt-0.5">
+                            {isPaid ? (
+                              <span className="text-[8px] font-mono uppercase font-black text-green-700 bg-green-50 border border-green-150 px-1.5 py-0.2 rounded-sm flex items-center gap-0.5">
+                                <CheckCircle2 size={8} /> Received
+                              </span>
+                            ) : inv.status === "needs_review" ? (
+                              <span className="text-[8px] font-mono uppercase font-black text-red-700 bg-red-50 border border-red-150 px-1.5 py-0.2 rounded-sm flex items-center gap-0.5">
+                                <AlertTriangle size={8} /> Needs Review
+                              </span>
+                            ) : (
+                              <span className="text-[8px] font-mono uppercase font-black text-blue-mid bg-blue-light border border-blue-mid/10 px-1.5 py-0.2 rounded-sm flex items-center gap-0.5">
+                                <Clock size={8} /> Outward Approved
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
                     </div>
-                  </motion.div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </AnimatePresence>
@@ -1310,6 +1574,131 @@ export default function Sales() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Segment 6.5: Pending Payments Spreadsheet Compliance Editor */}
+              <div className="card p-5 space-y-4 bg-white border-blue-mid/10 rounded-2xl font-mono text-xs">
+                <span className="text-[9px] font-mono uppercase font-black text-blue-mid block">Enterprise Spreadsheet Ledger Specifications</span>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Column: inputs */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[8px] font-mono uppercase font-black text-blue-mid block mb-1">Amount in Bank (Cleared Receipt)</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-blue-mid text-[10px]">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={localAmountInBank}
+                          onChange={e => setLocalAmountInBank(e.target.value)}
+                          className="w-full rounded border border-blue-mid/20 p-1.5 pl-5 text-[10px] text-blue-ink font-bold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[8px] font-mono uppercase font-black text-blue-mid block mb-1">Inst + RXIL Charges / LD / Short Supply</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-blue-mid text-[10px]">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={localInstRxilCharges}
+                          onChange={e => setLocalInstRxilCharges(e.target.value)}
+                          className="w-full rounded border border-blue-mid/20 p-1.5 pl-5 text-[10px] text-blue-ink font-bold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: inputs */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[8px] font-mono uppercase font-black text-blue-mid block mb-1">Date (As on Cleared)</label>
+                      <input
+                        type="text"
+                        value={localDateAsOn}
+                        onChange={e => setLocalDateAsOn(e.target.value)}
+                        className="w-full rounded border border-blue-mid/20 p-1.5 text-[10px] text-blue-ink font-bold"
+                        placeholder="e.g. 08.07.25 or 09/05/2026"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[8px] font-mono uppercase font-black text-blue-mid block mb-1">Spreadsheet Order Status</label>
+                      <select
+                        value={localOrderStatus}
+                        onChange={e => setLocalOrderStatus(e.target.value)}
+                        className="w-full rounded border border-blue-mid/20 bg-white p-1.5 text-[10px] text-blue-ink font-bold outline-none"
+                      >
+                        <option value="RUNNING">ORDER RUNNING</option>
+                        <option value="CLOSED">ORDER CLOSED</option>
+                        <option value="COMPLETE">ORDER COMPLETE</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mathematical Ledger Summary in Drawer */}
+                <div className="bg-blue-light/40 border border-blue-mid/10 p-3.5 rounded-xl space-y-2 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-blue-mid font-medium">Outward Invoice Total:</span>
+                    <span className="font-bold text-blue-ink">{formatINR(selectedInvoice.invoiceTotal)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-mid font-medium">Amount Received in Bank:</span>
+                    <span className="font-bold text-green-700">{formatINR(localAmountInBank || 0)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-blue-mid/10 pb-1.5">
+                    <span className="text-blue-mid font-medium">Unpaid Balance (Excel Spec):</span>
+                    <span className="font-black text-orange-700">
+                      {formatINR(Math.max(0, parseFloat(selectedInvoice.invoiceTotal || "0") - parseFloat(localAmountInBank || "0")))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-0.5">
+                    <span className="text-blue-mid font-medium">Deductions (Shortage/RXIL/LD):</span>
+                    <span className="font-bold text-red-600">{formatINR(localInstRxilCharges || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-black pt-1.5 border-t border-dashed border-blue-mid/15">
+                    <span className="text-blue-ink uppercase">Net Balance - Shortage:</span>
+                    <span className="text-blue-ink">
+                      {formatINR(
+                        Math.max(
+                          0,
+                          parseFloat(selectedInvoice.invoiceTotal || "0") -
+                            parseFloat(localAmountInBank || "0") -
+                            parseFloat(localInstRxilCharges || "0")
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const parsedBank = parseFloat(localAmountInBank || "0");
+                    const parsedCharges = parseFloat(localInstRxilCharges || "0");
+                    const calculatedBal = Math.max(0, parseFloat(selectedInvoice.invoiceTotal || "0") - parsedBank);
+                    const calculatedShortage = Math.max(0, calculatedBal - parsedCharges);
+
+                    updateMutation.mutate({
+                      id: selectedInvoice.id,
+                      amountInBank: String(parsedBank.toFixed(2)),
+                      instRxilCharges: String(parsedCharges.toFixed(2)),
+                      balance: String(calculatedBal.toFixed(2)),
+                      balanceShortage: String(calculatedShortage.toFixed(2)),
+                      orderStatus: localOrderStatus,
+                      dateAsOn: localDateAsOn
+                    });
+                    toast.success("Spreadsheet compliance ledger updated ✓");
+                  }}
+                  className="w-full bg-blue-ink hover:bg-blue-ink/90 text-white rounded-xl py-2 text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  Save Ledger Compliance Specs
+                </button>
               </div>
 
               {/* Segment 7: Accounts Receivable (AR) Automation Center */}

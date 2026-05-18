@@ -118,6 +118,19 @@ export const salesInvoices = pgTable("sales_invoices", {
   tcsCollected: numeric("tcs_collected", { precision: 14, scale: 2 }).default("0.00"),
   disputeReason: text("dispute_reason"),
 
+  // Pending Payments Spreadsheet Heads
+  slNo: text("sl_no"),
+  poNumber: text("po_number"),
+  project: text("project"),
+  amountIncGst: numeric("amount_inc_gst", { precision: 14, scale: 2 }).default("0.00"),
+  duePayment: numeric("due_payment", { precision: 14, scale: 2 }).default("0.00"),
+  amountInBank: numeric("amount_in_bank", { precision: 14, scale: 2 }).default("0.00"),
+  balance: numeric("balance", { precision: 14, scale: 2 }).default("0.00"),
+  dateAsOn: text("date_as_on"),
+  instRxilCharges: numeric("inst_rxil_charges", { precision: 14, scale: 2 }).default("0.00"),
+  balanceShortage: numeric("balance_shortage", { precision: 14, scale: 2 }).default("0.00"),
+  orderStatus: text("order_status").default("RUNNING"), // CLOSED, RUNNING, COMPLETE
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

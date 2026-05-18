@@ -202,6 +202,11 @@ function generateMockDataForType(type: string) {
         gstin: "19AAAFI6886Q1ZE",
         address: "55, Ezra Street, 1st Floor, Kolkata - 700001"
       },
+      e_way_bill_no: "123456789012",
+      vehicle_number: "WB-26-Z-1002",
+      po_number: "LE/25M421/POD/26/0008",
+      sl_no: "45/25-26",
+      project: "IOCL Vadodara",
       totals: { 
         sub_total_taxable: 4383.54,
         total_gst: 789.04,
@@ -221,7 +226,8 @@ function generateMockDataForType(type: string) {
           cgst_amount: 394.52, 
           sgst_rate: 9, 
           sgst_amount: 394.52, 
-          total_amount: 5173.00 
+          total_amount: 5173.00,
+          project: "IOCL Vadodara"
         }
       ]
     };
