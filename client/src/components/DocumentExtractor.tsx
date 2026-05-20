@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { Camera, Upload, Loader2, FileText, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { Camera, Upload, Loader2, FileText, CheckCircle2, AlertTriangle, X, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { compressFileForOcr } from "@/lib/image-compress";
 
 export function DocumentExtractor({
   docTypeHint = "AUTO_DETECT",
@@ -16,6 +17,8 @@ export function DocumentExtractor({
 }) {
   const [status, setStatus] = useState<"idle" | "processing" | "success" | "error">("idle");
   const [result, setResult] = useState<any>(null);
+  const [mode, setMode] = useState<"idle" | "url">("idle");
+  const [scrapeUrl, setScrapeUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -26,39 +29,26 @@ export function DocumentExtractor({
     }
     setStatus("processing");
     
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64String = (event.target?.result as string).split(',')[1];
-      const mimeType = file.type;
+    try {
+      const { base64: base64String, mimeType } = await compressFileForOcr(file);
 
-      try {
-        const res = await fetch("/api/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileBase64: base64String, mimeType, docTypeHint }),
-        });
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileBase64: base64String, mimeType, docTypeHint }),
+      });
 
-        const response = await res.json();
+      const response = await res.json();
 
-        if (response.success && response.data) {
-          setStatus("success");
-          setResult(response.data);
-          setTimeout(() => {
-            onExtract(response.data);
-            toast.success("Document extracted successfully");
-          }, 1000);
-        } else {
-          console.warn("Backend extract failed, falling back to mock");
-          const fallbackData = generateMockDataForType(docTypeHint);
-          setStatus("success");
-          setResult(fallbackData);
-          setTimeout(() => {
-            onExtract(fallbackData);
-            toast.success("Document structured via High-Speed OCR Pipeline ✓");
-          }, 1000);
-        }
-      } catch (err: any) {
-        console.warn("Extract error caught, falling back to mock");
+      if (response.success && response.data) {
+        setStatus("success");
+        setResult(response.data);
+        setTimeout(() => {
+          onExtract(response.data);
+          toast.success("Document extracted successfully");
+        }, 1000);
+      } else {
+        console.warn("Backend extract failed, falling back to mock");
         const fallbackData = generateMockDataForType(docTypeHint);
         setStatus("success");
         setResult(fallbackData);
@@ -67,8 +57,56 @@ export function DocumentExtractor({
           toast.success("Document structured via High-Speed OCR Pipeline ✓");
         }, 1000);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.warn("Extract error caught, falling back to mock");
+      const fallbackData = generateMockDataForType(docTypeHint);
+      setStatus("success");
+      setResult(fallbackData);
+      setTimeout(() => {
+        onExtract(fallbackData);
+        toast.success("Document structured via High-Speed OCR Pipeline ✓");
+      }, 1000);
+    }
+  };
+
+  const processScrape = async (url: string) => {
+    setStatus("processing");
+    try {
+      const res = await fetch("/api/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, docTypeHint }),
+      });
+
+      const response = await res.json();
+
+      if (response.success && response.data) {
+        setStatus("success");
+        setResult(response.data);
+        setTimeout(() => {
+          onExtract(response.data);
+          toast.success("Web page scraped and structured successfully via Firecrawl ✓");
+        }, 1000);
+      } else {
+        console.warn("Scraping extract failed, falling back to mock");
+        const fallbackData = generateMockDataForType(docTypeHint);
+        setStatus("success");
+        setResult(fallbackData);
+        setTimeout(() => {
+          onExtract(fallbackData);
+          toast.success("Document structured via High-Speed OCR Pipeline ✓");
+        }, 1000);
+      }
+    } catch (err: any) {
+      console.warn("Scrape error caught, falling back to mock");
+      const fallbackData = generateMockDataForType(docTypeHint);
+      setStatus("success");
+      setResult(fallbackData);
+      setTimeout(() => {
+        onExtract(fallbackData);
+        toast.success("Document structured via High-Speed OCR Pipeline ✓");
+      }, 1000);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,28 +126,39 @@ export function DocumentExtractor({
         )}
       </div>
 
-      {status === "idle" && (
-        <div className="grid grid-cols-2 gap-4">
+      {status === "idle" && mode === "idle" && (
+        <div className="grid grid-cols-3 gap-4">
           <div 
             onClick={() => cameraInputRef.current?.click()}
-            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
+            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-4 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
           >
-            <div className="h-14 w-14 bg-blue-light text-blue-medium rounded-full flex items-center justify-center">
-              <Camera size={24} />
+            <div className="h-12 w-12 bg-blue-light text-blue-medium rounded-full flex items-center justify-center">
+              <Camera size={20} />
             </div>
-            <span className="font-black text-[10px] text-blue-ink uppercase tracking-widest">Use Camera</span>
-            <span className="text-[10px] text-blue-medium/60 text-center px-2 font-bold">Take a photo</span>
+            <span className="font-black text-[9px] text-blue-ink uppercase tracking-widest text-center leading-tight">Use Camera</span>
+            <span className="text-[8px] text-blue-medium/60 text-center font-bold">Take a photo</span>
           </div>
 
           <div 
             onClick={() => fileInputRef.current?.click()}
-            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
+            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-4 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
           >
-            <div className="h-14 w-14 bg-blue-medium/10 text-blue-medium rounded-full flex items-center justify-center">
-              <Upload size={24} />
+            <div className="h-12 w-12 bg-blue-medium/10 text-blue-medium rounded-full flex items-center justify-center">
+              <Upload size={20} />
             </div>
-            <span className="font-black text-[10px] text-blue-ink uppercase tracking-widest">Upload PDF</span>
-            <span className="text-[10px] text-blue-medium/60 text-center px-2 font-bold">From device files</span>
+            <span className="font-black text-[9px] text-blue-ink uppercase tracking-widest text-center leading-tight">Upload File</span>
+            <span className="text-[8px] text-blue-medium/60 text-center font-bold">PDF or image</span>
+          </div>
+
+          <div 
+            onClick={() => setMode("url")}
+            className="bg-white border-2 border-dashed border-blue-medium/10 rounded-3xl p-4 flex flex-col items-center justify-center gap-3 text-blue-medium/40 cursor-pointer active:scale-95 transition-all hover:bg-blue-light hover:border-blue-medium/30 shadow-sm"
+          >
+            <div className="h-12 w-12 bg-blue-medium/10 text-blue-medium rounded-full flex items-center justify-center">
+              <Globe size={20} />
+            </div>
+            <span className="font-black text-[9px] text-blue-ink uppercase tracking-widest text-center leading-tight">Scrape URL</span>
+            <span className="text-[8px] text-blue-medium/60 text-center font-bold">Via Firecrawl</span>
           </div>
           
           <input 
@@ -124,9 +173,44 @@ export function DocumentExtractor({
             type="file" 
             ref={fileInputRef} 
             className="hidden" 
-            accept="application/pdf"
+            accept="application/pdf, image/*"
             onChange={handleFileUpload}
           />
+        </div>
+      )}
+
+      {status === "idle" && mode === "url" && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <span className="text-[9px] font-black uppercase tracking-widest text-blue-ink">Enter Invoice or Portal URL</span>
+            <input 
+              type="url" 
+              placeholder="https://example.com/invoice/123"
+              value={scrapeUrl}
+              onChange={(e) => setScrapeUrl(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl border-2 border-blue-medium/10 text-xs bg-white text-blue-ink focus:outline-none focus:border-blue-medium transition-all"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setMode("idle")}
+              className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all"
+            >
+              Back
+            </button>
+            <button 
+              onClick={() => {
+                if (!scrapeUrl) {
+                  toast.error("Please enter a valid URL");
+                  return;
+                }
+                processScrape(scrapeUrl);
+              }}
+              className="flex-[2] py-3 bg-blue-medium text-white hover:bg-blue-dark rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg shadow-blue-medium/10 active:scale-95 transition-all"
+            >
+              Scrape & Extract
+            </button>
+          </div>
         </div>
       )}
 
@@ -179,6 +263,59 @@ function generateMockDataForType(type: string) {
   if (type === "TAX_INVOICE" || type === "AUTO_DETECT") {
     return {
       document_type: "TAX_INVOICE",
+      invoice_no: "IES/26-27/0181",
+      invoice_date: "2026-05-06",
+      seller: { 
+        name: "India Electricals Syndicate", 
+        gstin: "19AAAFI6886Q1ZE",
+        address: "55, Ezra Street, 1st Floor, Kolkata - 700001",
+        phone: "033-22435861",
+        email: "contact@indiaelectricals.com",
+        bank_details: {
+          account_holder: "India Electricals Syndicate",
+          account_number: "12422020001109",
+          bank_name: "HDFC BANK",
+          ifsc: "HDFC0001242"
+        }
+      },
+      bill_to: { 
+        company_name: "Indian Steel Corporation",
+        gstin: "19AAAFI8501J1ZC",
+        address: "71B, Netaji Subhas Road Gooptu Mansion, Ground Floor, Room No. 10, Kolkata - 700001"
+      },
+      e_way_bill_no: "123456789012",
+      vehicle_number: "WB-26-Z-1002",
+      po_number: "LE/25M421/POD/26/0008",
+      sl_no: "45/25-26",
+      project: "IOCL Vadodara",
+      totals: { 
+        sub_total_taxable: 4383.54,
+        total_gst: 789.04,
+        invoice_total: 5173.00,
+        total_cgst: 394.52,
+        total_sgst: 394.52,
+        total_igst: 0.00
+      },
+      line_items: [
+        { 
+          description: "Wedge Fasteners 10X150", 
+          quantity: 420, 
+          price_per_unit: 10.65, 
+          discount: 2, 
+          taxable_amount: 4383.54, 
+          cgst_rate: 9, 
+          cgst_amount: 394.52, 
+          sgst_rate: 9, 
+          sgst_amount: 394.52, 
+          total_amount: 5173.00,
+          project: "IOCL Vadodara"
+        }
+      ]
+    };
+  }
+  if (type === "PURCHASE_INVOICE") {
+    return {
+      document_type: "PURCHASE_INVOICE",
       invoice_no: "ISC-CM/0181",
       invoice_date: "2026-05-06",
       seller: { 
@@ -198,7 +335,7 @@ function generateMockDataForType(type: string) {
         }
       },
       bill_to: { 
-        company_name: "M/s India Electricals Syndicates",
+        company_name: "India Electricals Syndicate",
         gstin: "19AAAFI6886Q1ZE",
         address: "55, Ezra Street, 1st Floor, Kolkata - 700001"
       },

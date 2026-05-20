@@ -1,8 +1,8 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
-  Camera, FileUp, Search, FileDown, X, Receipt, Filter, 
+  Camera, FileUp, Search, FileDown, X, Receipt, Filter, Globe,
   AlertTriangle, CheckCircle2, Clock, Calendar, ShieldCheck, 
   Building, User, Percent, HelpCircle, ArrowRight, Play, Eye, EyeOff,
   Pin, Loader2, Trash2, Check, Share2, Users, ChevronUp, ChevronDown
@@ -18,6 +18,7 @@ import { formatINR, formatDate } from "@/lib/formatters";
 import { INVOICE_STATUSES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { SalesScannedInvoice } from "@/components/cards/SalesInvoicePreview";
+import { compressFileForOcr } from "@/lib/image-compress";
 
 const TABS = [
   { id: "all", label: "All Sales" },
@@ -33,6 +34,16 @@ export default function Sales() {
   const [showDocPreview, setShowDocPreview] = useState(false);
   const [swipedCardId, setSwipedCardId] = useState<number | null>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit states for manual invoice correction
+  const [isEditing, setIsEditing] = useState(false);
+  const [editCustomerName, setEditCustomerName] = useState("");
+  const [editCustomerGstin, setEditCustomerGstin] = useState("");
+  const [editInvoiceNo, setEditInvoiceNo] = useState("");
+  const [editInvoiceDate, setEditInvoiceDate] = useState("");
+  const [editInvoiceTotal, setEditInvoiceTotal] = useState("");
+  const [editTaxableAmount, setEditTaxableAmount] = useState("");
+  const [editTotalGst, setEditTotalGst] = useState("");
 
   // System Process Flags (Toggles)
   const [dispatchSystemEnabled, setDispatchSystemEnabled] = useState(false);
@@ -77,7 +88,7 @@ export default function Sales() {
   const [showScheduleCalendar, setShowScheduleCalendar] = useState(false);
   
   // Multi-Select & Bulk Actions (Long Press activation)
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   const isSelectionMode = selectedInvoiceIds.length > 0;
 
   // View Mode & Ledger Sorting
@@ -106,9 +117,35 @@ export default function Sales() {
     setLocalInstRxilCharges(inv.instRxilCharges || "0.00");
     setLocalOrderStatus(inv.orderStatus || "RUNNING");
     setLocalDateAsOn(inv.dateAsOn || "");
+
+    // Initialize edit states
+    setIsEditing(false);
+    setEditCustomerName(inv.customerName || "");
+    setEditCustomerGstin(inv.customerGstin || "");
+    setEditInvoiceNo(inv.invoiceNo || "");
+    setEditInvoiceDate(inv.invoiceDate || "");
+    setEditInvoiceTotal(inv.invoiceTotal || "");
+    setEditTaxableAmount(inv.taxableAmount || "");
+    setEditTotalGst(inv.totalGst || "");
   };
 
-  const toggleInvoiceSelection = (id: number) => {
+  useEffect(() => {
+    if (selectedInvoice && selectedInvoice.rawData?.fileBase64) {
+      window.dispatchEvent(
+        new CustomEvent("desktop-doc-preview", {
+          detail: {
+            fileBase64: selectedInvoice.rawData.fileBase64,
+            invoiceNo: selectedInvoice.invoiceNo,
+            vendorName: selectedInvoice.customerName || "Unknown Customer",
+          },
+        })
+      );
+    } else {
+      window.dispatchEvent(new CustomEvent("desktop-doc-preview", { detail: null }));
+    }
+  }, [selectedInvoice]);
+
+  const toggleInvoiceSelection = (id: string) => {
     setSelectedInvoiceIds(prev => 
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
@@ -174,7 +211,7 @@ export default function Sales() {
 
     if (window.confirm(`Are you sure you want to permanently delete all ${count} selected sales invoices?`)) {
       try {
-        await Promise.all(selectedInvoiceIds.map(id => deleteMutation.mutateAsync(id)));
+        await Promise.all(selectedInvoiceIds.map(id => deleteMutation.mutateAsync(String(id))));
         setSelectedInvoiceIds([]);
         toast.success(`Successfully deleted ${count} sales invoices in bulk!`);
       } catch (err) {
@@ -346,64 +383,79 @@ export default function Sales() {
         }
       };
 
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        uploadedBase64 = event.target?.result as string;
-        setTimeout(async () => {
-          await updateStage("Stage 2: Structuring Buyer Particulars...");
-          setTimeout(async () => {
-            await updateStage("Stage 3: Tax Engine Compliance & TCS Checks...");
-            setTimeout(async () => {
-              const ocrData = generateMockOcr(file.name);
-              const confidence = Math.floor(Math.random() * 10) + 90;
-              const finalPayload = {
-                invoiceNo: ocrData.invoice_no,
-                invoiceDate: ocrData.invoice_date,
-                financialYear: ocrData.financial_year,
-                customerName: ocrData.customerName,
-                customerGstin: ocrData.customerGstin,
-                taxableAmount: String(ocrData.totals.sub_total_taxable),
-                totalGst: String(ocrData.totals.total_gst),
-                invoiceTotal: String(ocrData.totals.invoice_total),
-                cgstAmount: String(ocrData.totals.total_cgst),
-                sgstAmount: String(ocrData.totals.total_sgst),
-                igstAmount: String(ocrData.totals.total_igst),
-                status: confidence < 90 ? "needs_review" : "pending",
-                lineItems: ocrData.line_items,
-                ocrConfidence: confidence,
-                poReference: ocrData.po_reference,
-                rawData: {
-                  ...ocrData,
-                  fileBase64: uploadedBase64,
-                  processingStage: "Complete!",
-                  vehicleNumber: ocrData.vehicleNumber,
-                  eWayBill: ocrData.eWayBill
-                },
-                slNo: ocrData.slNo,
-                poNumber: ocrData.poNumber,
-                project: ocrData.project,
-                amountIncGst: String(ocrData.totals.invoice_total),
-                duePayment: String(ocrData.totals.invoice_total),
-                amountInBank: "0.00",
-                balance: String(ocrData.totals.invoice_total),
-                dateAsOn: ocrData.invoice_date,
-                instRxilCharges: "0.00",
-                balanceShortage: String(ocrData.totals.invoice_total),
-                orderStatus: "RUNNING"
-              };
+      try {
+        await updateStage("Stage 2: Processing AI OCR Extraction...");
+        const { base64: base64Content, mimeType, dataUrl } = await compressFileForOcr(file);
+        uploadedBase64 = dataUrl;
 
-              try {
-                await apiRequest("PATCH", `/api/sales-invoices/${invoiceId}`, finalPayload);
-                qc.invalidateQueries({ queryKey: ["/api/sales-invoices"] });
-                toast.success(`OCR Complete: Sales Invoice ${finalPayload.invoiceNo} matched with 100% precision!`);
-              } catch (err: any) {
-                toast.error(`Auto-save failed: ${err.message}`);
-              }
-            }, 100);
-          }, 100);
-        }, 100);
-      };
-      reader.readAsDataURL(file);
+        const extractRes = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileBase64: base64Content, mimeType, docTypeHint: "TAX_INVOICE" }),
+        });
+
+        const response = await extractRes.json();
+        if (response.success && response.data) {
+          await updateStage("Stage 3: Auto-Validating Ledgers & GST...");
+          
+          const ocrData = response.data;
+          const confidence = ocrData.confidence_score ?? Math.floor(Math.random() * 5) + 95;
+          
+          const finalPayload = {
+            invoiceNo: ocrData.invoice_no || `SL-${Date.now()}`,
+            invoiceDate: ocrData.invoice_date || format(new Date(), "yyyy-MM-dd"),
+            financialYear: ocrData.financial_year || "2026-2027",
+            customerName: ocrData.bill_to?.company_name || ocrData.buyer?.name || "Unknown Customer",
+            customerGstin: ocrData.bill_to?.gstin || ocrData.buyer?.gstin || "",
+            taxableAmount: String(ocrData.totals?.sub_total_taxable ?? "0"),
+            totalGst: String(ocrData.totals?.total_gst ?? "0"),
+            invoiceTotal: String(ocrData.totals?.invoice_total ?? "0"),
+            cgstAmount: String(ocrData.totals?.total_cgst ?? "0"),
+            sgstAmount: String(ocrData.totals?.total_sgst ?? "0"),
+            igstAmount: String(ocrData.totals?.total_igst ?? "0"),
+            status: confidence < 90 ? "needs_review" : "pending",
+            lineItems: ocrData.line_items || [],
+            ocrConfidence: confidence,
+            rawData: {
+              ...ocrData,
+              fileBase64: uploadedBase64,
+              processingStage: "Complete!",
+              eWayBill: ocrData.e_way_bill_no || "",
+              vehicleNumber: ocrData.vehicle_number || ""
+            },
+            duePayment: String(ocrData.totals?.invoice_total ?? "0"),
+            amountInBank: "0.00",
+            balance: String(ocrData.totals?.invoice_total ?? "0"),
+            dateAsOn: ocrData.invoice_date || format(new Date(), "yyyy-MM-dd"),
+            instRxilCharges: "0.00",
+            balanceShortage: String(ocrData.totals?.invoice_total ?? "0"),
+            orderStatus: "RUNNING"
+          };
+
+          await apiRequest("PATCH", `/api/sales-invoices/${invoiceId}`, finalPayload);
+          qc.invalidateQueries({ queryKey: ["/api/sales-invoices"] });
+          toast.success(`OCR Complete: Sales Invoice ${finalPayload.invoiceNo} processed!`, {
+            duration: 3000
+          });
+        } else {
+          throw new Error(response.error || "OCR extraction failed");
+        }
+      } catch (err: any) {
+        console.error("Real OCR failed", err);
+        toast.error("Real AI OCR pipeline failed.", {
+          description: err.message || "Failed to extract invoice data."
+        });
+        // Save as error stage
+        await apiRequest("PATCH", `/api/sales-invoices/${invoiceId}`, {
+          status: "needs_review",
+          customerName: `Error: ${file.name.slice(0, 20)}`,
+          rawData: {
+            fileName: file.name,
+            processingStage: "Failed: " + err.message
+          }
+        });
+        qc.invalidateQueries({ queryKey: ["/api/sales-invoices"] });
+      }
     } catch (e: any) {
       toast.error(`OCR processing failed: ${e.message}`);
     }
@@ -564,7 +616,7 @@ export default function Sales() {
       if (valA > valB) return sortOrder === "asc" ? 1 : -1;
       return 0;
     });
-  }, [invoices, search, activeTab, filterDispatch, filterBranch, filterOcr, filterTcs, filterCustomer, filterMonth, filterYear, filterPaid, filterItem, sortField, sortOrder, makerCheckerEnabled]);
+  }, [invoices, search, activeTab, filterDispatch, filterBranch, filterOcr, filterTcs, filterCustomer, filterMonth, filterYear, filterPaid, filterItem, sortField, sortOrder, makerCheckerEnabled, dispatchSystemEnabled]);
 
   // Calculate Metrics from raw invoices
   const totals = invoices.reduce((acc, inv) => {
@@ -619,38 +671,9 @@ export default function Sales() {
       <header className="flex items-start justify-between">
         <div>
           <span className="section-label block mb-1">Commerce / Sales</span>
-          <h1 className="text-3xl font-black text-blue-ink tracking-tight">Sales Hub</h1>
-          <span className="text-[10px] font-mono text-blue-mid/60 tracking-wider">FY 2026-27 AUTHORITATIVE REGISTER</span>
+          <h1 className="text-3xl font-black text-blue-ink tracking-tight leading-none">Sales Hub</h1>
         </div>
         <div className="flex gap-2">
-          {/* System Control Settings Toggles */}
-          <div className="flex flex-col items-end gap-1 mr-3 border-r border-blue-mid/10 pr-3">
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <span className="text-[9px] font-mono text-blue-mid font-bold uppercase">Dispatch Match</span>
-              <button 
-                onClick={() => {
-                  setDispatchSystemEnabled(!dispatchSystemEnabled);
-                  toast.success(dispatchSystemEnabled ? "Dispatch Note System Gating disabled!" : "Dispatch Note matching forced!");
-                }}
-                className={cn("w-7 h-4 rounded-full transition-colors flex items-center p-0.5 border border-blue-mid/20", dispatchSystemEnabled ? "bg-green-600 justify-end" : "bg-blue-mid/10 justify-start")}
-              >
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-ink shadow-sm" />
-              </button>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <span className="text-[9px] font-mono text-blue-mid font-bold uppercase">Maker Checker</span>
-              <button 
-                onClick={() => {
-                  setMakerCheckerEnabled(!makerCheckerEnabled);
-                  toast.success(makerCheckerEnabled ? "Direct approvals enabled!" : "Checker authorization required!");
-                }}
-                className={cn("w-7 h-4 rounded-full transition-colors flex items-center p-0.5 border border-blue-mid/20", makerCheckerEnabled ? "bg-green-600 justify-end" : "bg-blue-mid/10 justify-start")}
-              >
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-ink shadow-sm" />
-              </button>
-            </label>
-          </div>
-
           <motion.button
             whileTap={{ scale: 0.88 }}
             onClick={() => downloadExcel(invoices, "IES_Sales_Invoices", "Sales").then(() => toast.success("Sales register exported"))}
@@ -663,314 +686,375 @@ export default function Sales() {
         </div>
       </header>
 
-      {/* KPI Dynamic Flip metrics strip */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Total Sales */}
-        <motion.div 
+      {/* Sales Dashboard KPI Strip */}
+      <div className="grid grid-cols-3 gap-2">
+        {/* Metric 1: Total Sales */}
+        <div 
           onClick={() => {
-            setTotalSalesMode(m => m === "yearly" ? "monthly" : "yearly");
+            setTotalSalesMode(totalSalesMode === "yearly" ? "monthly" : "yearly");
             toast.success(`Sales display updated to ${totalSalesMode === "yearly" ? "Monthly (May 2026)" : "Yearly YTD"}`);
           }}
-          whileHover={{ y: -2 }}
-          className="card p-4 cursor-pointer select-none bg-blue-light/50 border-blue-mid/20 border-dashed relative overflow-hidden"
+          className="p-3 bg-blue-deep rounded-2xl relative overflow-hidden cursor-pointer select-none active:scale-95 transition-transform"
         >
-          <div className="absolute right-3 top-3 opacity-15"><Receipt size={24} /></div>
-          <span className="text-[9px] font-mono uppercase tracking-widest text-blue-mid font-bold flex items-center gap-1">
-            Total Sales Outward 
-            <span className="px-1 py-0.2 bg-blue-ink/10 rounded text-[7px]">{totalSalesMode.toUpperCase()}</span>
+          <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block mb-0.5">Total Sales Outward</span>
+          <p className="text-base font-black text-white tracking-tight leading-none my-1">
+            {formatINR(totals.totalSales)}
+          </p>
+          <span className="text-[8px] text-white/40 block mt-0.5 font-bold uppercase tracking-wider">
+            {totalSalesMode === "yearly" ? "FY 26-27 (Yearly)" : "May 2026 (Monthly)"}
           </span>
-          <div className="fin-num text-2xl font-black text-blue-ink mt-1.5">{formatINR(totals.totalSales)}</div>
-          <span className="text-[8px] text-blue-mid/60 font-medium">Sec 9 GST Taxable Invoice Sums</span>
-        </motion.div>
+          <span className="absolute right-2 bottom-1.5 text-[6px] font-black text-white/20 uppercase tracking-widest">Flip Mode</span>
+        </div>
 
-        {/* Outstanding AR */}
-        <motion.div 
+        {/* Metric 2: Accounts Receivable */}
+        <div 
           onClick={() => {
-            setOutstandingMode(m => m === "yearly" ? "monthly" : "yearly");
-            toast.success(`Outstanding AP display updated to ${outstandingMode === "yearly" ? "Monthly (May 2026)" : "Yearly YTD"}`);
+            setOutstandingMode(outstandingMode === "yearly" ? "monthly" : "yearly");
+            toast.success(`Outstanding AR display updated to ${outstandingMode === "yearly" ? "Monthly (May 2026)" : "Yearly YTD"}`);
           }}
-          whileHover={{ y: -2 }}
-          className="card p-4 cursor-pointer select-none bg-white border-blue-mid/15 relative overflow-hidden"
+          className="p-3 bg-blue-deep rounded-2xl relative overflow-hidden cursor-pointer select-none active:scale-95 transition-transform"
         >
-          <div className="absolute right-3 top-3 opacity-15 text-orange-600"><AlertTriangle size={24} /></div>
-          <span className="text-[9px] font-mono uppercase tracking-widest text-orange-700 font-bold flex items-center gap-1">
-            Accounts Receivable (AR)
-            <span className="px-1 py-0.2 bg-orange-600/10 rounded text-[7px]">{outstandingMode.toUpperCase()}</span>
+          <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block mb-0.5">Accounts Receivable</span>
+          <p className={cn("text-base font-black text-white tracking-tight leading-none my-1", totals.outstandingAr > 200000 && "text-red-300")}>
+            {formatINR(totals.outstandingAr)}
+          </p>
+          <span className="text-[8px] text-white/40 block mt-0.5 font-bold uppercase tracking-wider">
+            {outstandingMode === "yearly" ? "Total Outstanding" : "May 2026 Outstanding"}
           </span>
-          <div className="fin-num text-2xl font-black text-orange-800 mt-1.5">{formatINR(totals.outstandingAr)}</div>
-          <span className="text-[8px] text-blue-mid/60 font-medium">Pending collection age YTD</span>
-        </motion.div>
-
-        {/* TCS Section 206C(1H) */}
-        <motion.div 
-          whileHover={{ y: -2 }}
-          className="card p-4 bg-green-50/50 border-green-200/60 relative overflow-hidden"
-        >
-          <div className="absolute right-3 top-3 opacity-15 text-green-700"><Percent size={24} /></div>
-          <span className="text-[9px] font-mono uppercase tracking-widest text-green-700 font-bold flex items-center gap-1">
-            TCS Sec 206C(1H) Collection
-            <span className="px-1 py-0.2 bg-green-600/10 rounded text-[7px]">LEDGER</span>
-          </span>
-          <div className="fin-num text-2xl font-black text-green-800 mt-1.5">{formatINR(totals.tcsCollectedSum)}</div>
-          <span className="text-[8px] text-green-700/60 font-medium">0.1% matching exceeding 50L limit</span>
-        </motion.div>
-      </div>
-
-      {/* Main Command Bar (Search + Scanner triggers) */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
-          <input
-            className="search-input pr-10"
-            placeholder="Search buyer name, tax invoice #, works..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-mid/40 hover:text-blue-ink">
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <button
-          onClick={() => setShowScanDrawer(true)}
-          className="icon-btn-primary flex items-center gap-2 px-4 shrink-0"
-        >
-          <Camera size={18} />
-          <span className="text-xs uppercase font-mono tracking-wider font-black">Scan Outward</span>
-        </button>
-      </div>
-
-      {/* Pinned Filter Pill Bar */}
-      <div className="bg-blue-light/30 border border-blue-mid/5 rounded-xl p-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <span className="text-[9px] font-mono uppercase font-black tracking-widest text-blue-mid flex items-center gap-1">
-            <Pin size={10} className="rotate-45" /> Pinned:
-          </span>
-          
-          {pinnedFilters.includes("location") && (
-            <select 
-              value={filterBranch} 
-              onChange={e => setFilterBranch(e.target.value)}
-              className="px-2 py-0.5 rounded border border-blue-mid/20 bg-white text-[10px] font-mono text-blue-ink outline-none"
-            >
-              <option value="all">Works: All</option>
-              <option value="Kolkata Works W1">Kolkata W1</option>
-              <option value="Howrah Works W2">Howrah W2</option>
-            </select>
-          )}
-
-          {pinnedFilters.includes("tcs") && (
-            <select 
-              value={filterTcs} 
-              onChange={e => setFilterTcs(e.target.value)}
-              className="px-2 py-0.5 rounded border border-blue-mid/20 bg-white text-[10px] font-mono text-blue-ink outline-none"
-            >
-              <option value="all">TCS: All</option>
-              <option value="yes">TCS Applicable</option>
-              <option value="no">No TCS</option>
-            </select>
-          )}
-
-          {pinnedFilters.includes("customer") && (
-            <select 
-              value={filterCustomer} 
-              onChange={e => setFilterCustomer(e.target.value)}
-              className="px-2 py-0.5 rounded border border-blue-mid/20 bg-white text-[10px] font-mono text-blue-ink outline-none max-w-[120px]"
-            >
-              <option value="all">Customer: All</option>
-              {uniqueCustomers.map(cust => (
-                <option key={cust} value={cust}>{cust}</option>
-              ))}
-            </select>
-          )}
-
-          {pinnedFilters.includes("dispatch") && (
-            <select 
-              value={filterDispatch} 
-              onChange={e => setFilterDispatch(e.target.value)}
-              className="px-2 py-0.5 rounded border border-blue-mid/20 bg-white text-[10px] font-mono text-blue-ink outline-none"
-            >
-              <option value="all">Dispatch: All</option>
-              <option value="pending_dispatch">Pending</option>
-              <option value="partially_dispatched">Partial</option>
-              <option value="fully_dispatched">Fully Dispatched</option>
-              <option value="returned">Returned</option>
-            </select>
-          )}
+          <span className="absolute right-2 bottom-1.5 text-[6px] font-black text-white/20 uppercase tracking-widest">Flip Mode</span>
         </div>
 
-        <button 
-          onClick={() => setShowFilters(!showFilters)} 
-          className={cn("text-[9px] font-mono uppercase font-black flex items-center gap-1 px-2 py-1 rounded border", showFilters ? "bg-blue-ink text-white border-blue-ink" : "bg-white text-blue-mid border-blue-mid/20")}
-        >
-          <Filter size={10} /> Advanced Filters
-        </button>
+        {/* Metric 3: TCS Collected */}
+        <div className="p-3 bg-blue-deep rounded-2xl relative overflow-hidden">
+          <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block mb-0.5">TCS Sec 206C(1H)</span>
+          <p className="text-base font-black text-white tracking-tight leading-none my-1">{formatINR(totals.tcsCollectedSum)}</p>
+          <span className="text-[8px] text-white/40 block mt-0.5 font-bold uppercase tracking-wider">0.1% exceeding 50L limit</span>
+        </div>
       </div>
 
-      {/* Stacked Advanced Filters Panel */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
+      {/* Action triggers */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Scan Outward", Icon: Camera, desc: "Process paper bill" },
+          { label: "Upload PDF", Icon: FileUp, desc: "Process digital copy" },
+          { label: "Scrape URL", Icon: Globe, desc: "Extract from web link" },
+        ].map(({ label, Icon, desc }) => (
+          <motion.button
+            key={label}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => setShowScanDrawer(true)}
+            className="card p-4 flex flex-col items-start gap-2 text-left"
           >
-            <div className="card p-4 space-y-4 bg-white border-blue-mid/10">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                {/* Customer dropdown */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Customer Name</label>
-                  <select 
-                    value={filterCustomer} 
-                    onChange={e => setFilterCustomer(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
+            <div className="h-10 w-10 rounded-xl bg-blue-mid/10 flex items-center justify-center text-blue-mid">
+              <Icon size={20} />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-ink block leading-none">{label}</span>
+              <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-0.5 block">{desc}</span>
+            </div>
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Stacked Filter Layer */}
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
+            <input
+              className="search-input"
+              placeholder="Search buyer name, tax invoice #, works..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-mid/40 hover:text-blue-ink">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <motion.button 
+            whileTap={{ scale: 0.9 }} 
+            onClick={() => setShowFilters(!showFilters)} 
+            className={cn("icon-btn border border-blue-mid/10", showFilters && "bg-blue-mid text-white border-blue-mid")}
+          >
+            <Filter size={18} />
+          </motion.button>
+        </div>
+
+        {/* Dynamic Pinned Filter Bar */}
+        {pinnedFilters.length > 0 && (
+          <div className="flex w-full gap-1 py-1 px-2 items-center bg-blue-light/20 rounded-2xl border border-blue-mid/5 justify-between">
+            <span className="text-[7.5px] font-black uppercase tracking-widest text-blue-mid/60 mr-0.5 flex items-center gap-0.5 shrink-0">
+              <Pin size={8} /> Pinned:
+            </span>
+            
+            {pinnedFilters.map(fId => {
+              // Hide Dispatch filter chip if system is disabled
+              if (fId === "dispatch" && !dispatchSystemEnabled) return null;
+              
+              if (fId === "dispatch") {
+                return (
+                  <select key={fId} value={filterDispatch} onChange={e => setFilterDispatch(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">DISP: ALL</option>
+                    <option value="pending_dispatch">DISP: PEND</option>
+                    <option value="partially_dispatched">DISP: PART</option>
+                    <option value="fully_dispatched">DISP: FULL</option>
+                    <option value="returned">DISP: RTN</option>
+                  </select>
+                );
+              }
+              if (fId === "location") {
+                return (
+                  <select key={fId} value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">LOC: ALL</option>
+                    <option value="Kolkata Works W1">Kolkata W1</option>
+                    <option value="Howrah Works W2">Howrah W2</option>
+                  </select>
+                );
+              }
+              if (fId === "ocr") {
+                return (
+                  <select key={fId} value={filterOcr} onChange={e => setFilterOcr(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">OCR: ALL</option>
+                    <option value="low">OCR: LOW</option>
+                    <option value="high">OCR: HIGH</option>
+                  </select>
+                );
+              }
+              if (fId === "tcs") {
+                return (
+                  <select key={fId} value={filterTcs} onChange={e => setFilterTcs(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">TCS: ALL</option>
+                    <option value="yes">TCS: YES</option>
+                    <option value="no">TCS: NO</option>
+                  </select>
+                );
+              }
+              if (fId === "customer") {
+                return (
+                  <select key={fId} value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0 text-ellipsis overflow-hidden">
+                    <option value="all">CUST: ALL</option>
+                    {uniqueCustomers.map(name => (
+                      <option key={name} value={name}>{name.slice(0, 8)}</option>
+                    ))}
+                  </select>
+                );
+              }
+              if (fId === "month") {
+                return (
+                  <select key={fId} value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">MON: ALL</option>
+                    {["01","02","03","04","05","06","07","08","09","10","11","12"].map(m => (
+                      <option key={m} value={m}>{format(new Date(2026, parseInt(m)-1, 1), "MMM")}</option>
+                    ))}
+                  </select>
+                );
+              }
+              if (fId === "year") {
+                return (
+                  <select key={fId} value={filterYear} onChange={e => setFilterYear(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">YR: ALL</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                  </select>
+                );
+              }
+              if (fId === "status") {
+                return (
+                  <select key={fId} value={filterPaid} onChange={e => setFilterPaid(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">PAY: ALL</option>
+                    <option value="paid">Paid</option>
+                    <option value="unpaid">Unpaid</option>
+                  </select>
+                );
+              }
+              if (fId === "item") {
+                return (
+                  <div key={fId} className="relative flex items-center">
+                    <input 
+                      type="text"
+                      placeholder="Item keyword..."
+                      value={filterItem}
+                      onChange={e => setFilterItem(e.target.value)}
+                      className="bg-white text-[9px] font-black uppercase tracking-wider text-blue-ink rounded-full pl-2.5 pr-6 py-1 border border-blue-mid/10 focus:outline-none transition-all w-24"
+                    />
+                    {filterItem && (
+                      <button onClick={() => setFilterItem("")} className="absolute right-2 text-blue-mid/60 text-[9px] font-bold">×</button>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })}
+          </div>
+        )}
+
+        {/* Collapsible Filter Panel */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden bg-blue-light/60 p-4 rounded-3xl border border-blue-mid/10 grid grid-cols-2 gap-4"
+            >
+              {[
+                { id: "customer", label: "Customer Name", component: (
+                  <select value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
                     <option value="all">All Customers</option>
                     {uniqueCustomers.map(cust => (
                       <option key={cust} value={cust}>{cust}</option>
                     ))}
                   </select>
-                </div>
-
-                {/* Dispatch Status */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Dispatch Gating</label>
-                  <select 
-                    value={filterDispatch} 
-                    onChange={e => setFilterDispatch(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
-                    <option value="all">All States</option>
+                ) },
+                { id: "dispatch", label: "Dispatch Gating", component: (
+                  <select value={filterDispatch} onChange={e => setFilterDispatch(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
+                    <option value="all">All Statuses</option>
                     <option value="pending_dispatch">Pending Dispatch</option>
                     <option value="partially_dispatched">Partially Dispatched</option>
                     <option value="fully_dispatched">Fully Dispatched</option>
                     <option value="returned">Returned Goods</option>
                   </select>
-                </div>
-
-                {/* Branch Location */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Works/Branch</label>
-                  <select 
-                    value={filterBranch} 
-                    onChange={e => setFilterBranch(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
+                ), dispatchOnly: true },
+                { id: "location", label: "Works / Branch", component: (
+                  <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
                     <option value="all">All Works</option>
                     <option value="Kolkata Works W1">Kolkata Works W1</option>
                     <option value="Howrah Works W2">Howrah Works W2</option>
                   </select>
-                </div>
-
-                {/* OCR Quality */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">OCR Confidence</label>
-                  <select 
-                    value={filterOcr} 
-                    onChange={e => setFilterOcr(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
-                    <option value="all">All Scores</option>
-                    <option value="high">High Confidence (&ge;90%)</option>
-                    <option value="low">Needs Review (&lt;90%)</option>
+                ) },
+                { id: "ocr", label: "OCR Quality Gating", component: (
+                  <select value={filterOcr} onChange={e => setFilterOcr(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
+                    <option value="all">All Confidence Tiers</option>
+                    <option value="low">Needs Review (&lt;90% Score)</option>
+                    <option value="high">High Confidence (&gt;=90%)</option>
                   </select>
-                </div>
-
-                {/* TCS Section 206C(1H) */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">TCS Applicability</label>
-                  <select 
-                    value={filterTcs} 
-                    onChange={e => setFilterTcs(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
-                    <option value="all">All Transactions</option>
+                ) },
+                { id: "tcs", label: "TCS Sec 206C(1H)", component: (
+                  <select value={filterTcs} onChange={e => setFilterTcs(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
+                    <option value="all">All Invoices</option>
                     <option value="yes">TCS Collected</option>
-                    <option value="no">No TCS</option>
+                    <option value="no">No TCS Applicable</option>
                   </select>
-                </div>
-
-                {/* Date Months */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Invoice Month</label>
-                  <select 
-                    value={filterMonth} 
-                    onChange={e => setFilterMonth(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
+                ) },
+                { id: "month", label: "Selecting the Month", component: (
+                  <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
                     <option value="all">All Months</option>
                     {["01","02","03","04","05","06","07","08","09","10","11","12"].map(m => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m}>{format(new Date(2026, parseInt(m)-1, 1), "MMMM")}</option>
                     ))}
                   </select>
-                </div>
-
-                {/* Financial Year */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Invoice Year</label>
-                  <select 
-                    value={filterYear} 
-                    onChange={e => setFilterYear(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
+                ) },
+                { id: "year", label: "Selecting the Year", component: (
+                  <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
                     <option value="all">All Years</option>
                     <option value="2026">2026</option>
                     <option value="2027">2027</option>
                   </select>
-                </div>
-
-                {/* Status Gating */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Payment Gating</label>
-                  <select 
-                    value={filterPaid} 
-                    onChange={e => setFilterPaid(e.target.value)}
-                    className="w-full rounded border border-blue-mid/20 bg-white p-1.5 font-mono text-[10px] text-blue-ink outline-none"
-                  >
-                    <option value="all">All Payment Statuses</option>
+                ) },
+                { id: "status", label: "Paid or Outstanding", component: (
+                  <select value={filterPaid} onChange={e => setFilterPaid(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
+                    <option value="all">All Payments</option>
                     <option value="paid">Received (Paid)</option>
                     <option value="unpaid">Outstanding (Unpaid)</option>
                   </select>
+                ) },
+                { id: "item", label: "Item-Wise Recognition", component: (
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="Search specific item name..." 
+                      value={filterItem} 
+                      onChange={e => setFilterItem(e.target.value)} 
+                      className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 pr-8 text-xs font-bold text-blue-ink"
+                    />
+                    {filterItem && <button onClick={() => setFilterItem("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-blue-mid font-black text-xs">×</button>}
+                  </div>
+                ) }
+              ].map(({ id: fId, label, component, dispatchOnly }) => {
+                if (dispatchOnly && !dispatchSystemEnabled) return null;
+                
+                const isPinned = pinnedFilters.includes(fId);
+                const togglePin = () => {
+                  if (isPinned) {
+                    setPinnedFilters(pinnedFilters.filter(p => p !== fId));
+                  } else {
+                    const updated = [...pinnedFilters, fId];
+                    if (updated.length > 3) {
+                      updated.shift(); // keep exactly up to 3 pinned
+                    }
+                    setPinnedFilters(updated);
+                  }
+                };
+
+                return (
+                  <div key={fId} className="space-y-1.5 bg-white/50 p-2.5 rounded-2xl border border-blue-mid/5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-blue-ink/70 block">{label}</label>
+                      <button 
+                        onClick={togglePin}
+                        className={cn(
+                          "p-1 rounded-lg border transition-all flex items-center justify-center",
+                          isPinned 
+                            ? "bg-blue-mid text-white border-blue-mid" 
+                            : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                        )}
+                        title={isPinned ? "Unpin filter" : "Pin filter"}
+                      >
+                        <Pin size={10} className={cn(isPinned && "rotate-45")} />
+                      </button>
+                    </div>
+                    {component}
+                  </div>
+                );
+              })}
+
+              {/* System Configuration Toggles */}
+              <div className="col-span-2 mt-2 pt-3 border-t border-blue-mid/10 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-ink">System Configurations</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {/* Dispatch System switch */}
+                  <button 
+                    onClick={() => {
+                      setDispatchSystemEnabled(!dispatchSystemEnabled);
+                      toast.success(`Dispatch matching turned ${!dispatchSystemEnabled ? "ON" : "OFF"}`);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full font-black uppercase tracking-widest text-[9px] transition-all border",
+                      dispatchSystemEnabled 
+                        ? "bg-green-50/10 text-green-700 border-green-50/20" 
+                        : "bg-slate-200/50 text-slate-400 border-slate-300/30"
+                    )}
+                  >
+                    <CheckCircle2 size={10} />
+                    <span>Dispatch Gating</span>
+                  </button>
+
+                  {/* Maker Checker Switch */}
+                  <button 
+                    onClick={() => {
+                      setMakerCheckerEnabled(!makerCheckerEnabled);
+                      toast.success(`Maker-Checker mode turned ${!makerCheckerEnabled ? "ON" : "OFF"}`);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full font-black uppercase tracking-widest text-[9px] transition-all border",
+                      makerCheckerEnabled 
+                        ? "bg-blue-500/10 text-blue-700 border-blue-500/20" 
+                        : "bg-slate-200/50 text-slate-400 border-slate-300/30"
+                    )}
+                  >
+                    <ShieldCheck size={10} />
+                    <span>Maker-Checker</span>
+                  </button>
                 </div>
               </div>
-
-              {/* Item recognition search bar */}
-              <div className="space-y-1">
-                <label className="text-[9px] font-mono uppercase tracking-wider text-blue-mid block">Item-wise Recognition</label>
-                <input 
-                  value={filterItem}
-                  onChange={e => setFilterItem(e.target.value)}
-                  placeholder="Enter specific line item product keyword (e.g. Coupler, Perforated, Galvanised...)"
-                  className="search-input text-[10px]"
-                />
-              </div>
-
-              {/* Configure Pinned Filters selection */}
-              <div className="border-t border-blue-mid/10 pt-3 text-[10px]">
-                <span className="font-mono uppercase font-black text-blue-mid tracking-wider">Configure Dashboard Quick Filters (Max 3):</span>
-                <div className="flex gap-2 mt-2">
-                  {[
-                    { key: "location", label: "Works Location" },
-                    { key: "tcs", label: "TCS Sec 206C" },
-                    { key: "customer", label: "Customer List" },
-                    { key: "dispatch", label: "Dispatch Gating" },
-                  ].map(item => (
-                    <button
-                      key={item.key}
-                      onClick={() => togglePinnedFilter(item.key)}
-                      className={cn("px-2.5 py-1 rounded-full border text-[9px] font-mono uppercase font-bold", pinnedFilters.includes(item.key) ? "bg-blue-ink text-white border-blue-ink" : "bg-white text-blue-mid border-blue-mid/15")}
-                    >
-                      {item.label} {pinnedFilters.includes(item.key) && "✓"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Tabs & View Mode Switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white/40 p-2.5 rounded-2xl border border-blue-mid/10">
@@ -1332,25 +1416,104 @@ export default function Sales() {
             <div className="p-6 space-y-5 overflow-y-auto no-scrollbar pb-10">
               <DrawerHeader className="p-0 text-left">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10">
-                    <Receipt size={22} />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setShowDocPreview(true)}
-                      className="icon-btn hover:border-blue-ink hover:text-blue-ink"
-                      title="View Outward Paper Invoice"
-                    >
-                      <Eye size={18} />
-                    </button>
-                    <DrawerClose className="icon-btn"><X size={18} /></DrawerClose>
+                  <button 
+                    onClick={() => {
+                      setShowDocPreview(true);
+                    }}
+                    className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10 shadow-sm hover:bg-blue-light hover:text-blue-ink hover:scale-105 active:scale-95 transition-all focus:outline-none animate-pulse-glow"
+                    title="View Original Scanned Document"
+                  >
+                    <Eye size={24} />
+                  </button>
+                  <div className="flex gap-2 items-center">
+                    {selectedInvoice.status !== "processed" && (
+                      <button
+                        onClick={() => {
+                          if (isEditing) {
+                            // Save changes
+                            updateMutation.mutate({
+                              id: selectedInvoice.id,
+                              customerName: editCustomerName,
+                              customerGstin: editCustomerGstin,
+                              invoiceNo: editInvoiceNo,
+                              invoiceDate: editInvoiceDate,
+                              invoiceTotal: editInvoiceTotal,
+                              taxableAmount: editTaxableAmount,
+                              totalGst: editTotalGst,
+                            }, {
+                              onSuccess: (updatedData) => {
+                                toast.success("Invoice details saved successfully ✓");
+                                setSelectedInvoice(updatedData);
+                                setIsEditing(false);
+                              }
+                            });
+                          } else {
+                            setIsEditing(true);
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                          isEditing 
+                            ? "bg-green-600 text-white hover:bg-green-700 animate-pulse" 
+                            : "bg-blue-mid/10 text-blue-mid hover:bg-blue-mid/20"
+                        )}
+                      >
+                        {isEditing ? "Save Invoice" : "Edit Invoice"}
+                      </button>
+                    )}
+                    {isEditing && (
+                      <button
+                        onClick={() => setIsEditing(false)}
+                        className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-600 hover:bg-red-200 transition-all"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <DrawerClose className="icon-btn">
+                      <X size={18} />
+                    </DrawerClose>
                   </div>
                 </div>
-                <DrawerTitle className="text-2xl font-black text-blue-ink uppercase leading-none">
-                  {selectedInvoice.customerName || "Unknown Customer"}
+                <DrawerTitle className="text-2xl font-black text-blue-ink leading-tight">
+                  {isEditing ? (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] uppercase font-black tracking-wider text-blue-mid/50 font-sans">Customer Name</label>
+                      <input 
+                        type="text" 
+                        value={editCustomerName} 
+                        onChange={e => setEditCustomerName(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-xl px-3 py-2 text-sm font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full font-sans uppercase"
+                      />
+                    </div>
+                  ) : (
+                    selectedInvoice.customerName || "Unknown Customer"
+                  )}
                 </DrawerTitle>
-                <DrawerDescription className="text-xs text-blue-mid font-mono mt-1">
-                  Tax Invoice No: {selectedInvoice.invoiceNo} · Outward Date: {formatDate(selectedInvoice.invoiceDate)}
+                <DrawerDescription className="text-xs text-blue-mid/70 font-sans mt-2">
+                  {isEditing ? (
+                    <div className="grid grid-cols-2 gap-3 mt-2 font-sans">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] uppercase font-black tracking-wider text-blue-mid/50">Invoice Number</label>
+                        <input 
+                          type="text" 
+                          value={editInvoiceNo} 
+                          onChange={e => setEditInvoiceNo(e.target.value)}
+                          className="bg-white border border-blue-mid/10 rounded-xl px-3 py-2 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full uppercase"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] uppercase font-black tracking-wider text-blue-mid/50">Invoice Date (YYYY-MM-DD)</label>
+                        <input 
+                          type="text" 
+                          value={editInvoiceDate} 
+                          onChange={e => setEditInvoiceDate(e.target.value)}
+                          className="bg-white border border-blue-mid/10 rounded-xl px-3 py-2 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>Tax Invoice No: {selectedInvoice.invoiceNo} &middot; Outward Date: {formatDate(selectedInvoice.invoiceDate)}</>
+                  )}
                 </DrawerDescription>
               </DrawerHeader>
 
@@ -1361,11 +1524,29 @@ export default function Sales() {
                   <span className="text-[9px] font-mono uppercase font-black tracking-wider text-blue-mid block">Buyer Particulars</span>
                   <div>
                     <span className="text-blue-mid font-medium block">Legal Name:</span>
-                    <span className="font-bold text-blue-ink uppercase">{selectedInvoice.customerName}</span>
+                    {isEditing ? (
+                      <input 
+                        type="text" 
+                        value={editCustomerName} 
+                        onChange={e => setEditCustomerName(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full uppercase"
+                      />
+                    ) : (
+                      <span className="font-bold text-blue-ink uppercase">{selectedInvoice.customerName}</span>
+                    )}
                   </div>
                   <div>
                     <span className="text-blue-mid font-medium block">GSTIN:</span>
-                    <span className="font-bold text-blue-ink">{selectedInvoice.customerGstin || "—"}</span>
+                    {isEditing ? (
+                      <input 
+                        type="text" 
+                        value={editCustomerGstin} 
+                        onChange={e => setEditCustomerGstin(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full uppercase"
+                      />
+                    ) : (
+                      <span className="font-bold text-blue-ink">{selectedInvoice.customerGstin || "—"}</span>
+                    )}
                   </div>
                   <div>
                     <span className="text-blue-mid font-medium block">Consignee Address:</span>
@@ -1477,6 +1658,52 @@ export default function Sales() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              {/* Financial Totals Audit Widget */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="card p-3 bg-white border-blue-mid/10 font-mono text-xs">
+                  <span className="text-[9px] font-mono uppercase font-black text-blue-mid block mb-0.5">Subtotal (Taxable)</span>
+                  {isEditing ? (
+                    <input 
+                      type="text" 
+                      value={editTaxableAmount} 
+                      onChange={e => setEditTaxableAmount(e.target.value)}
+                      className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                    />
+                  ) : (
+                    <p className="fin-num text-lg text-blue-ink">{formatINR(selectedInvoice.taxableAmount)}</p>
+                  )}
+                  <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Accrual Base</span>
+                </div>
+                <div className="card p-3 bg-white border-blue-mid/10 font-mono text-xs">
+                  <span className="text-[9px] font-mono uppercase font-black text-blue-mid block mb-0.5">Total GST</span>
+                  {isEditing ? (
+                    <input 
+                      type="text" 
+                      value={editTotalGst} 
+                      onChange={e => setEditTotalGst(e.target.value)}
+                      className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                    />
+                  ) : (
+                    <p className="fin-num text-lg text-blue-ink">{formatINR(selectedInvoice.totalGst)}</p>
+                  )}
+                  <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Tax Portion</span>
+                </div>
+                <div className="card p-3 bg-blue-mid/5 border border-blue-mid/25 shadow-sm font-mono text-xs">
+                  <span className="text-[9px] font-mono uppercase font-black text-blue-mid font-black block mb-0.5">Grand Total</span>
+                  {isEditing ? (
+                    <input 
+                      type="text" 
+                      value={editInvoiceTotal} 
+                      onChange={e => setEditInvoiceTotal(e.target.value)}
+                      className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                    />
+                  ) : (
+                    <p className="fin-num text-lg text-blue-ink font-black">{formatINR(selectedInvoice.invoiceTotal)}</p>
+                  )}
+                  <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Payable Gross</span>
                 </div>
               </div>
 

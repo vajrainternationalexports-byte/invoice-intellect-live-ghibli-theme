@@ -348,6 +348,7 @@ export class MemStorage implements IStorage {
       id: "si1",
       slNo: "30/25-26",
       poNumber: "LE/LE25M421/POD/26/000008",
+      poReference: null,
       customerName: "L&T Construction",
       customerGstin: "27AAACL8391N2Z1",
       customerId: null,
@@ -403,6 +404,7 @@ export class MemStorage implements IStorage {
       id: "si2",
       slNo: "42/25-26",
       poNumber: "MO/71139/IOCL/CableTray/PO/194 Dated 25.03.2026",
+      poReference: null,
       customerName: "B&R Vadodara",
       customerGstin: "24AAACB9824F1ZA",
       customerId: null,
@@ -458,6 +460,7 @@ export class MemStorage implements IStorage {
       id: "si3",
       slNo: "42/25-26",
       poNumber: "MO/71139/IOCL/CableTray/PO/194 Dated 25.03.2026",
+      poReference: null,
       customerName: "B&R Vadodara",
       customerGstin: "24AAACB9824F1ZA",
       customerId: null,
@@ -513,6 +516,7 @@ export class MemStorage implements IStorage {
       id: "si4",
       slNo: "01/26-27",
       poNumber: "4500097527",
+      poReference: null,
       customerName: "PES Eng. Pvt Ltd",
       customerGstin: "09AAACP9921D1ZO",
       customerId: null,
@@ -568,6 +572,7 @@ export class MemStorage implements IStorage {
       id: "si5",
       slNo: "35/25-26",
       poNumber: "AM/NS-HAZ/PJ7/5300062248 Dated 16.02.2026",
+      poReference: null,
       customerName: "AMNS",
       customerGstin: "24AAACA9824F1Z1",
       customerId: null,
@@ -1043,11 +1048,32 @@ export class DatabaseStorage implements IStorage {
     return a;
   }
   async createVendorBankAccount(acct: any) {
-    const [r] = await db.insert(vendorBankAccounts).values(acct).returning();
+    const clean: any = {};
+    const allowed = [
+      'vendorId', 'accountHolderName', 'accountNumber', 'ifscCode', 'bankName',
+      'branchName', 'upiId', 'cancelledChequeUrl', 'verificationStatus', 'pennyDropRef'
+    ];
+    for (const key of allowed) {
+      if (acct[key] !== undefined) {
+        clean[key] = acct[key];
+      }
+    }
+    const [r] = await db.insert(vendorBankAccounts).values(clean).returning();
     return r;
   }
   async updateVendorBankAccount(id: string, updates: Partial<VendorBankAccount>) {
-    const [r] = await db.update(vendorBankAccounts).set(updates).where(eq(vendorBankAccounts.id, id)).returning();
+    const clean: any = {};
+    const allowed = [
+      'vendorId', 'accountHolderName', 'accountNumber', 'ifscCode', 'bankName',
+      'branchName', 'upiId', 'cancelledChequeUrl', 'verificationStatus', 'pennyDropRef'
+    ];
+    const upAny = updates as any;
+    for (const key of allowed) {
+      if (upAny[key] !== undefined) {
+        clean[key] = upAny[key];
+      }
+    }
+    const [r] = await db.update(vendorBankAccounts).set(clean).where(eq(vendorBankAccounts.id, id)).returning();
     return r;
   }
 

@@ -20,8 +20,54 @@ export default function JobWork() {
   const [mainTab, setMainTab] = useState<MainTab>("incoming");
   const [subTab,  setSubTab]  = useState<SubTab>("vendors");
 
-  const { data: entries         = [] } = useQuery<any[]>({ queryKey: ["/api/job-work"] });
+  const { data: rawEntries = [] } = useQuery<any[]>({ queryKey: ["/api/job-work"] });
   const { data: labourInvoices  = [] } = useQuery<any[]>({ queryKey: ["/api/labour-invoices"] });
+
+  const entries = useMemo(() => {
+    return rawEntries.map((e: any) => {
+      if (e.items) return e;
+
+      // Extract transaction rows
+      const txs = e.transactions;
+      let itemsList: any[] = [];
+      
+      if (txs && typeof txs === "object") {
+        const inward = Array.isArray(txs.inwardRows) ? txs.inwardRows : [];
+        
+        inward.forEach((row: any) => {
+          itemsList.push({
+            ourWt: toFloat(row.inwardQty),
+            zinc: toFloat(row.grossZinc)
+          });
+        });
+      } else if (Array.isArray(txs)) {
+        txs.forEach((row: any) => {
+          itemsList.push({
+            ourWt: toFloat(row.wt || row.inwardQty),
+            zinc: toFloat(row.zincConsumed || row.grossZinc)
+          });
+        });
+      }
+
+      // Add zinc received row as a negative item
+      if (parseFloat(e.totalZincReceivedKg) > 0) {
+        itemsList.push({
+          ourWt: 0,
+          zinc: -Math.abs(toFloat(e.totalZincReceivedKg))
+        });
+      }
+
+      return {
+        ...e,
+        vendor: e.galvanizerName || "Unknown Galvanizer",
+        challan: e.period || "Statement",
+        date: e.periodFrom || (e.createdAt ? new Date(e.createdAt).toLocaleDateString() : ""),
+        items: itemsList.length > 0 ? itemsList : [
+          { ourWt: toFloat(e.totalWeightKg), zinc: toFloat(e.totalZincConsumedKg) }
+        ]
+      };
+    });
+  }, [rawEntries]);
 
   /* ── Zinc aggregations ─────────────────────────── */
   const totals = useMemo(() => {

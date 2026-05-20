@@ -2,7 +2,7 @@
  * Dashboard.tsx — Command centre overview
  * Uses useDashboard() hook for all data. All maths via formatters.
  */
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Zap, ShoppingBag,
   Receipt, Layers, ChevronRight, Activity, BarChart3,
@@ -19,9 +19,9 @@ import { cn } from "@/lib/utils";
 const container = {
   animate: { transition: { staggerChildren: 0.07 } },
 };
-const item: any = {
+const item: Variants = {
   initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] } },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] as any } },
 };
 
 export default function Dashboard() {

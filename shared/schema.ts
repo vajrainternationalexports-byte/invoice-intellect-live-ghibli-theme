@@ -88,7 +88,7 @@ export const salesInvoices = pgTable("sales_invoices", {
   invoiceNo: text("invoice_no").notNull(),
   invoiceDate: text("invoice_date").notNull(),
   financialYear: text("financial_year"),
-  customerId: varchar("customer_id"),
+  customerId: text("customer_id"),
   customerName: text("customer_name"),
   customerGstin: text("customer_gstin"),
   taxableAmount: numeric("taxable_amount", { precision: 14, scale: 2 }),

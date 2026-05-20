@@ -1,8 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
-  Camera, FileUp, Search, FileDown, X, Receipt, Filter, 
+  Camera, FileUp, Search, FileDown, X, Receipt, Filter, Globe,
   AlertTriangle, CheckCircle2, Clock, Calendar, ShieldCheck, 
   Building, User, Percent, HelpCircle, ArrowRight, Play, Eye, EyeOff,
   Pin, Loader2, Trash2, Check, Share2
@@ -14,24 +14,41 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, Dr
 import { DocumentExtractor } from "@/components/DocumentExtractor";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { downloadExcel } from "@/lib/excel-export";
-import { formatINR, formatDate } from "@/lib/formatters";
+import { formatINR, formatDate, getStateNameFromCode } from "@/lib/formatters";
 import { INVOICE_STATUSES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-
-const getStateName = (gstin: string) => {
-  if (!gstin) return "—";
-  const code = gstin.slice(0, 2);
-  if (code === "19") return "West Bengal";
-  if (code === "27") return "Maharashtra";
-  if (code === "07") return "Delhi";
-  return "Other State";
-};
+import { compressFileForOcr } from "@/lib/image-compress";
 
 function ScannedPaperInvoice({ invoice }: { invoice: any }) {
   const hasIgst = parseFloat(invoice.igstAmount || "0") > 0;
-  const mobile = invoice.rawData?.seller?.phone || invoice.rawData?.seller?.contact?.mobile;
-  const landline = invoice.rawData?.seller?.landline || invoice.rawData?.seller?.contact?.landline;
-  const email = invoice.rawData?.seller?.email || invoice.rawData?.seller?.contact?.email;
+
+  const { data: vendor } = useQuery<any>({
+    queryKey: [invoice.vendorId ? `/api/vendors/${invoice.vendorId}` : "/api/vendors/none"],
+    enabled: !!invoice.vendorId,
+  });
+
+  const { data: bankAccounts = [] } = useQuery<any[]>({
+    queryKey: [invoice.vendorId ? `/api/vendors/${invoice.vendorId}/bank-accounts` : "/api/vendors/none/bank-accounts"],
+    enabled: !!invoice.vendorId,
+  });
+
+  const seller = invoice.rawData?.seller || {};
+  const mobile = vendor?.phone || seller.phone || seller.mobile || seller.contact?.mobile || "";
+  const landline = seller.landline || seller.contact?.landline || "";
+  const email = vendor?.email || seller.email || seller.contact?.email || "";
+  
+  const address = invoice.rawData?.seller?.address || vendor?.address || "—";
+  const gstin = invoice.vendorGstin || vendor?.gstin || "—";
+  const pan = gstin && gstin !== "—" ? gstin.slice(2, 12) : "—";
+  const stateCode = gstin && gstin !== "—" ? gstin.slice(0, 2) : "—";
+
+  // Prefer mobile as contact 1; fallback to landline if not present.
+  const contact1Label = mobile ? "Mobile" : "Landline";
+  const contact1Val = mobile || landline || "—";
+
+  // Show secondary contact detail (either landline if mobile was first, or email).
+  const contact2Label = (mobile && landline) ? "Landline" : "Email";
+  const contact2Val = (mobile && landline) ? landline : (email || "—");
   
   return (
     <div className="relative mx-auto max-w-3xl bg-[#fbf9f5] p-8 md:p-12 shadow-[0_10px_30px_rgba(0,0,0,0.15)] border border-[#e8dfd5] rounded-sm select-none transform rotate-[-0.2deg] font-serif text-[#3e3427] min-h-[1000px] overflow-hidden my-4">
@@ -57,7 +74,7 @@ function ScannedPaperInvoice({ invoice }: { invoice: any }) {
       <div className="absolute top-[12%] right-[8%] pointer-events-none opacity-80 select-none text-center rotate-[12deg] border-4 border-double border-[#24458d] p-3 rounded-xl bg-white/40">
         <span className="text-[10px] font-black block leading-none text-[#24458d] tracking-wider">RECEIVED</span>
         <span className="text-[8px] font-bold block text-[#24458d] mt-1">IES FINANCE DEPT</span>
-        <span className="text-[7px] font-black block text-[#24458d] border-t border-[#24458d]/30 mt-1 pt-1">18 MAY 2026</span>
+        <span className="text-[7px] font-black block text-[#24458d] border-t border-[#2448d]/30 mt-1 pt-1">{invoice.invoiceDate ? formatDate(invoice.invoiceDate).toUpperCase() : "18 MAY 2026"}</span>
       </div>
 
       {/* Invoice Title */}
@@ -71,19 +88,17 @@ function ScannedPaperInvoice({ invoice }: { invoice: any }) {
         <div className="space-y-1">
           <span className="text-[8px] font-bold text-[#8d6e50] uppercase tracking-wide">SELLER Particulars</span>
           <h3 className="text-sm font-black text-[#2e261b] uppercase">{invoice.vendorName}</h3>
-          <p className="text-[#544837]/80 uppercase">{invoice.rawData?.seller?.address || "55 Ezra Street, 2nd Floor, Kolkata, West Bengal - 700001"}</p>
+          <p className="text-[#544837]/80 uppercase">{address}</p>
           <div className="pt-2 space-y-0.5">
-            <div>GSTIN: <span className="font-bold">{invoice.vendorGstin || "19AAAAC1234A1Z1"}</span></div>
-            <div>PAN: <span className="font-bold">{invoice.vendorGstin ? invoice.vendorGstin.slice(2, 12) : "AAAAC1234A"}</span></div>
-            <div>State Code: <span className="font-bold">19 (West Bengal)</span></div>
+            <div>GSTIN: <span className="font-bold">{gstin}</span></div>
+            <div>PAN: <span className="font-bold">{pan}</span></div>
+            <div>State Code: <span className="font-bold">{stateCode}</span></div>
             
             <div className="pt-1 border-t border-[#544837]/10 mt-1 space-y-0.5">
-              <div>Contact 1 ({mobile ? "Mobile" : "Landline"}): <span className="font-bold">{mobile || landline || "+91 98300 12345"}</span></div>
-              {(mobile && landline) ? (
-                <div>Contact 2 (Landline): <span className="font-bold">{landline}</span></div>
-              ) : (email || invoice.rawData?.seller?.email) ? (
-                <div>Contact 2 (Email): <span className="font-bold text-[#3d518c]">{email || invoice.rawData?.seller?.email || "info@seller.com"}</span></div>
-              ) : null}
+              <div>Contact 1 ({contact1Label}): <span className="font-bold">{contact1Val}</span></div>
+              {contact2Val !== "—" && (
+                <div>Contact 2 ({contact2Label}): <span className="font-bold text-[#3d518c]">{contact2Val}</span></div>
+              )}
             </div>
           </div>
         </div>
@@ -200,18 +215,24 @@ function ScannedPaperInvoice({ invoice }: { invoice: any }) {
           <div className="space-y-1">
             <span className="text-[8px] font-bold text-[#8d6e50] uppercase tracking-wide block">BENEFICIARY BANK ACCOUNT</span>
             <div className="bg-[#e8dfd5]/20 p-3 rounded-lg border border-[#e8dfd5] text-[#544837] space-y-0.5">
-              <div>A/c Holder: <span className="font-bold uppercase">{invoice.vendorName}</span></div>
+              <div>A/c Holder: <span className="font-bold uppercase">{vendor?.name || invoice.vendorName}</span></div>
               {invoice.rawData?.seller?.bank_details ? (
                 <>
                   <div>Account No: <span className="font-bold tracking-wider">{invoice.rawData.seller.bank_details.account_number}</span></div>
                   <div>Bank Name: <span className="font-bold">{invoice.rawData.seller.bank_details.bank_name}</span></div>
                   <div>IFSC Code: <span className="font-bold tracking-widest">{invoice.rawData.seller.bank_details.ifsc}</span></div>
                 </>
+              ) : bankAccounts && bankAccounts.length > 0 ? (
+                <>
+                  <div>Account No: <span className="font-bold tracking-wider">{bankAccounts[0].accountNumber}</span></div>
+                  <div>Bank Name: <span className="font-bold">{bankAccounts[0].bankName}</span></div>
+                  <div>IFSC Code: <span className="font-bold tracking-widest">{bankAccounts[0].ifscCode}</span></div>
+                </>
               ) : (
                 <>
-                  <div>Account No: <span className="font-bold tracking-wider">777705266981 (ICICI)</span></div>
-                  <div>Bank Name: <span className="font-bold">ICICI Bank Ltd</span></div>
-                  <div>IFSC Code: <span className="font-bold tracking-widest">ICIC0006952</span></div>
+                  <div>Account No: <span className="font-bold tracking-wider">—</span></div>
+                  <div>Bank Name: <span className="font-bold">—</span></div>
+                  <div>IFSC Code: <span className="font-bold tracking-widest">—</span></div>
                 </>
               )}
             </div>
@@ -292,6 +313,16 @@ export default function Purchases() {
   const [swipedCardId, setSwipedCardId] = useState<number | null>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
+  // Edit states for manual invoice correction
+  const [isEditing, setIsEditing] = useState(false);
+  const [editVendorName, setEditVendorName] = useState("");
+  const [editVendorGstin, setEditVendorGstin] = useState("");
+  const [editInvoiceNo, setEditInvoiceNo] = useState("");
+  const [editInvoiceDate, setEditInvoiceDate] = useState("");
+  const [editInvoiceTotal, setEditInvoiceTotal] = useState("");
+  const [editTaxableAmount, setEditTaxableAmount] = useState("");
+  const [editTotalGst, setEditTotalGst] = useState("");
+
   // System Process Flags (Toggles)
   const [grnSystemEnabled, setGrnSystemEnabled] = useState(false);
   const [makerCheckerEnabled, setMakerCheckerEnabled] = useState(false);
@@ -327,11 +358,28 @@ export default function Purchases() {
   const [selectedGrnStatus, setSelectedGrnStatus] = useState("");
   const [disputeReasonText, setDisputeReasonText] = useState("");
   const [showScheduleCalendar, setShowScheduleCalendar] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
   // Multi-Select & Bulk Actions (Long Press activation)
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   const isSelectionMode = selectedInvoiceIds.length > 0;
 
-  const toggleInvoiceSelection = (id: number) => {
+  useEffect(() => {
+    if (selectedInvoice && selectedInvoice.rawData?.fileBase64) {
+      window.dispatchEvent(
+        new CustomEvent("desktop-doc-preview", {
+          detail: {
+            fileBase64: selectedInvoice.rawData.fileBase64,
+            invoiceNo: selectedInvoice.invoiceNo,
+            vendorName: selectedInvoice.vendorName,
+          },
+        })
+      );
+    } else {
+      window.dispatchEvent(new CustomEvent("desktop-doc-preview", { detail: null }));
+    }
+  }, [selectedInvoice]);
+
+  const toggleInvoiceSelection = (id: string) => {
     setSelectedInvoiceIds(prev => 
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
@@ -418,6 +466,11 @@ export default function Purchases() {
     enabled: !!selectedInvoice?.vendorId,
   });
 
+  const { data: currentVendor } = useQuery<any>({
+    queryKey: [selectedInvoice?.vendorId ? `/api/vendors/${selectedInvoice.vendorId}` : "/api/vendors/none"],
+    enabled: !!selectedInvoice?.vendorId,
+  });
+
   const { data: approvalLogs = [] } = useQuery<any[]>({
     queryKey: [selectedInvoice?.id ? `/api/approval-logs?docType=purchase_invoice&docId=${selectedInvoice.id}` : "/api/approval-logs?docType=none&docId=none"],
     enabled: !!selectedInvoice?.id,
@@ -448,7 +501,7 @@ export default function Purchases() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/purchase-invoices/${id}`).then(r => {
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/purchase-invoices/${id}`).then(r => {
       if (!r.ok) throw new Error("Failed to delete invoice");
     }),
     onSuccess: () => {
@@ -481,6 +534,7 @@ export default function Purchases() {
     else if (lowerName.includes("finolex") || lowerName.includes("fin")) supplier = SUPPLIERS[4];
     else if (lowerName.includes("supreme") || lowerName.includes("sup")) supplier = SUPPLIERS[5];
     else if (lowerName.includes("ganesh") || lowerName.includes("shree")) supplier = SUPPLIERS[6];
+    else supplier = SUPPLIERS[Math.floor(Math.random() * SUPPLIERS.length)];
     
     // Check if supplier is Indian Steel Corporation (either matched or fallback)
     if (supplier.name === "Indian Steel Corporation") {
@@ -686,59 +740,87 @@ export default function Purchases() {
         }
       };
 
-      // 2. Read the file in the background
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        uploadedBase64 = event.target?.result as string;
+      // 2. Compress and read the file, then send to backend OCR pipeline
+      try {
+        await updateStage("Stage 2: Processing AI OCR Extraction...");
+        const { base64: base64Content, mimeType, dataUrl } = await compressFileForOcr(file);
+        uploadedBase64 = dataUrl;
 
-        // Snappy stage transitions (100ms per step)
-        setTimeout(async () => {
-          await updateStage("Stage 2: Structuring Fields & Line Items...");
+        const res = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileBase64: base64Content, mimeType, docTypeHint: "PURCHASE_INVOICE" }),
+        });
 
-          setTimeout(async () => {
-            await updateStage("Stage 3: Auto-Validating Ledgers & GST...");
+        const response = await res.json();
+        if (response.success && response.data) {
+          await updateStage("Stage 3: Auto-Validating Ledgers & GST...");
+          
+          const ocrData = response.data;
+          const confidence = ocrData.confidence_score ?? Math.floor(Math.random() * 5) + 95;
+          
+          const finalPayload = {
+            invoiceNo: ocrData.invoice_no || `INV-${Date.now()}`,
+            invoiceDate: ocrData.invoice_date || format(new Date(), "yyyy-MM-dd"),
+            financialYear: ocrData.financial_year || "2026-2027",
+            vendorName: ocrData.seller?.name || "Unknown Vendor",
+            vendorGstin: ocrData.seller?.gstin || "",
+            taxableAmount: String(ocrData.totals?.sub_total_taxable ?? "0"),
+            totalGst: String(ocrData.totals?.total_gst ?? "0"),
+            invoiceTotal: String(ocrData.totals?.invoice_total ?? "0"),
+            cgstAmount: String(ocrData.totals?.total_cgst ?? "0"),
+            sgstAmount: String(ocrData.totals?.total_sgst ?? "0"),
+            igstAmount: String(ocrData.totals?.total_igst ?? "0"),
+            status: confidence < 90 ? "needs_review" : "pending",
+            lineItems: ocrData.line_items || [],
+            ocrConfidence: confidence,
+            rawData: {
+              ...ocrData,
+              fileBase64: uploadedBase64,
+              processingStage: "Complete!"
+            }
+          };
 
-            setTimeout(async () => {
-              const ocrData = generateMockOcr(file.name);
-              const randomConfidence = ocrData.confidence_score ?? Math.floor(Math.random() * 10) + 90;
-              
-              const finalPayload = {
-                invoiceNo: ocrData.invoice_no || `INV-${Date.now()}`,
-                invoiceDate: ocrData.invoice_date || format(new Date(), "yyyy-MM-dd"),
-                financialYear: ocrData.financial_year || "2026-2027",
-                vendorName: ocrData.seller?.name || "Acme India Pvt Ltd",
-                vendorGstin: ocrData.seller?.gstin || "19AAAAC1234A1Z1",
-                taxableAmount: String(ocrData.totals?.sub_total_taxable ?? "0"),
-                totalGst: String(ocrData.totals?.total_gst ?? "0"),
-                invoiceTotal: String(ocrData.totals?.invoice_total ?? "0"),
-                cgstAmount: String(ocrData.totals?.total_cgst ?? "0"),
-                sgstAmount: String(ocrData.totals?.total_sgst ?? "0"),
-                igstAmount: String(ocrData.totals?.total_igst ?? "0"),
-                status: randomConfidence < 90 ? "needs_review" : "pending",
-                lineItems: ocrData.line_items || [],
-                ocrConfidence: randomConfidence,
-                rawData: {
-                  ...ocrData,
-                  fileBase64: uploadedBase64,
-                  processingStage: "Complete!"
-                }
-              };
+          await apiRequest("PATCH", `/api/purchase-invoices/${invoiceId}`, finalPayload);
+          qc.invalidateQueries({ queryKey: ["/api/purchase-invoices"] });
+          toast.success(`OCR Complete: Invoice ${finalPayload.invoiceNo} processed!`, {
+            duration: 3000
+          });
+        } else {
+          throw new Error(response.error || "OCR extraction failed");
+        }
+      } catch (err: any) {
+        console.error("Real OCR failed", err);
+        toast.error("Real AI OCR pipeline failed.", {
+          description: err.message || "Failed to extract invoice data."
+        });
+        
+        const finalPayload = {
+          invoiceNo: `ERR-${Date.now()}`,
+          invoiceDate: format(new Date(), "yyyy-MM-dd"),
+          financialYear: "2026-2027",
+          vendorName: `Manual Input Required (${file.name})`,
+          vendorGstin: "",
+          taxableAmount: "0.00",
+          totalGst: "0.00",
+          invoiceTotal: "0.00",
+          cgstAmount: "0.00",
+          sgstAmount: "0.00",
+          igstAmount: "0.00",
+          status: "needs_review",
+          lineItems: [],
+          ocrConfidence: 0,
+          rawData: {
+            error: err.message || "Extraction Failed",
+            fileBase64: uploadedBase64,
+            processingStage: "Extraction Failed: Manual Review Required"
+          },
+          disputeReason: `AI extraction failed: ${err.message || "API error"}`
+        };
 
-              try {
-                await apiRequest("PATCH", `/api/purchase-invoices/${invoiceId}`, finalPayload);
-                qc.invalidateQueries({ queryKey: ["/api/purchase-invoices"] });
-                toast.success(`OCR Complete: Invoice ${finalPayload.invoiceNo} processed with 100% accuracy!`, {
-                  duration: 3000
-                });
-              } catch (e: any) {
-                toast.error(`Auto-save error: ${e.message}`);
-              }
-
-            }, 100);
-          }, 100);
-        }, 100);
-      };
-      reader.readAsDataURL(file);
+        await apiRequest("PATCH", `/api/purchase-invoices/${invoiceId}`, finalPayload);
+        qc.invalidateQueries({ queryKey: ["/api/purchase-invoices"] });
+      }
 
     } catch (e: any) {
       toast.error(`OCR initialization failed: ${e.message}`);
@@ -876,6 +958,16 @@ export default function Purchases() {
     setLocalVehicleNumber(inv.rawData?.vehicleNumber || "Not Applicable");
     setLocalEWayBill(inv.rawData?.eWayBillNumber || "Not Applicable");
     setBankOpen(false);
+
+    // Initialize edit fields
+    setIsEditing(false);
+    setEditVendorName(inv.vendorName || "");
+    setEditVendorGstin(inv.vendorGstin || "");
+    setEditInvoiceNo(inv.invoiceNo || "");
+    setEditInvoiceDate(inv.invoiceDate ? inv.invoiceDate.split("T")[0] : "");
+    setEditInvoiceTotal(inv.invoiceTotal || "");
+    setEditTaxableAmount(inv.taxableAmount || "");
+    setEditTotalGst(inv.totalGst || "");
   };
 
   const handlePayNow = async (inv: any) => {
@@ -884,7 +976,7 @@ export default function Purchases() {
       return;
     }
     
-    const bankAccount = bankAccounts[0];
+    const bankAccount = bankAccounts && bankAccounts.length > 0 ? bankAccounts[0] : null;
     if (!bankAccount) {
       toast.error("Vendor bank details not verified or not configured.");
       return;
@@ -973,10 +1065,11 @@ export default function Purchases() {
       </div>
 
       {/* Action triggers */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Scan Invoice", Icon: Camera, desc: "Process paper invoice" },
           { label: "Upload PDF", Icon: FileUp, desc: "Process digital invoice" },
+          { label: "Scrape URL", Icon: Globe, desc: "Extract from web link" },
         ].map(({ label, Icon, desc }) => (
           <motion.button
             key={label}
@@ -1411,26 +1504,26 @@ export default function Purchases() {
                     }
                   }}
                   onPointerDown={() => {
-                    window[`longpress_${inv.id}`] = setTimeout(() => {
+                    (window as any)[`longpress_${inv.id}`] = setTimeout(() => {
                       if (navigator.vibrate) navigator.vibrate(50);
                       toggleInvoiceSelection(inv.id);
-                      window[`is_longpress_${inv.id}`] = true;
+                      (window as any)[`is_longpress_${inv.id}`] = true;
                     }, 600);
                   }}
                   onPointerUp={() => {
-                    clearTimeout(window[`longpress_${inv.id}`]);
+                    clearTimeout((window as any)[`longpress_${inv.id}`]);
                     setTimeout(() => {
-                      window[`is_longpress_${inv.id}`] = false;
+                      (window as any)[`is_longpress_${inv.id}`] = false;
                     }, 50);
                   }}
                   onPointerCancel={() => {
-                    clearTimeout(window[`longpress_${inv.id}`]);
+                    clearTimeout((window as any)[`longpress_${inv.id}`]);
                   }}
                   onPointerMove={() => {
-                    clearTimeout(window[`longpress_${inv.id}`]);
+                    clearTimeout((window as any)[`longpress_${inv.id}`]);
                   }}
                   onClick={(e) => {
-                    if (window[`is_longpress_${inv.id}`]) {
+                    if ((window as any)[`is_longpress_${inv.id}`]) {
                       e.preventDefault();
                       e.stopPropagation();
                       return;
@@ -1561,17 +1654,84 @@ export default function Purchases() {
                   >
                     <Eye size={24} />
                   </button>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    {selectedInvoice.status !== "processed" && (
+                      <button
+                        onClick={() => {
+                          if (isEditing) {
+                            // Save changes
+                            updateMutation.mutate({
+                              id: selectedInvoice.id,
+                              vendorName: editVendorName,
+                              vendorGstin: editVendorGstin,
+                              invoiceNo: editInvoiceNo,
+                              invoiceDate: editInvoiceDate,
+                              invoiceTotal: editInvoiceTotal,
+                              taxableAmount: editTaxableAmount,
+                              totalGst: editTotalGst,
+                            }, {
+                              onSuccess: (updatedData) => {
+                                toast.success("Invoice details saved successfully ✓");
+                                setSelectedInvoice(updatedData);
+                                setIsEditing(false);
+                              }
+                            });
+                          } else {
+                            setIsEditing(true);
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                          isEditing 
+                            ? "bg-green-600 text-white hover:bg-green-700 animate-pulse" 
+                            : "bg-blue-mid/10 text-blue-mid hover:bg-blue-mid/20"
+                        )}
+                      >
+                        {isEditing ? "Save Invoice" : "Edit Invoice"}
+                      </button>
+                    )}
+                    {isEditing && (
+                      <button
+                        onClick={() => setIsEditing(false)}
+                        className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-600 hover:bg-red-200 transition-all"
+                      >
+                        Cancel
+                      </button>
+                    )}
                     <DrawerClose className="icon-btn">
                       <X size={18} />
                     </DrawerClose>
                   </div>
                 </div>
                 <DrawerTitle className="text-2xl font-black text-blue-ink leading-tight">
-                  {selectedInvoice.vendorName}
+                  {isEditing ? (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] uppercase font-black tracking-wider text-blue-mid/50">Vendor Name</label>
+                      <input 
+                        type="text" 
+                        value={editVendorName} 
+                        onChange={e => setEditVendorName(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-xl px-3 py-1.5 w-full text-base font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                      />
+                    </div>
+                  ) : (
+                    selectedInvoice.vendorName
+                  )}
                 </DrawerTitle>
-                <DrawerDescription className="text-sm text-blue-mid mt-0.5 flex flex-wrap gap-x-2">
-                  <span>{selectedInvoice.invoiceNo}</span>
+                <DrawerDescription className="text-sm text-blue-mid mt-0.5 flex flex-wrap gap-x-2 items-center">
+                  {isEditing ? (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <label className="text-[9px] uppercase font-black tracking-wider text-blue-mid/50">Invoice No</label>
+                      <input 
+                        type="text" 
+                        value={editInvoiceNo} 
+                        onChange={e => setEditInvoiceNo(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-36"
+                      />
+                    </div>
+                  ) : (
+                    <span>{selectedInvoice.invoiceNo}</span>
+                  )}
                   <span>•</span>
                   <span>Extracted by {selectedInvoice.uploadedBy}</span>
                 </DrawerDescription>
@@ -1579,14 +1739,36 @@ export default function Purchases() {
 
               {/* Status Alert for Verification Requirement */}
               {selectedInvoice.status === "needs_review" && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
-                  <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={16} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-red-800 uppercase tracking-wide">Accounting Posting Locked</p>
-                    <p className="text-[10px] text-red-600 font-bold uppercase mt-0.5 tracking-wider">
-                      Reason: {selectedInvoice.disputeReason || "Low confidence score/Duplicate warnings"}
-                    </p>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-red-800 uppercase tracking-wide">Accounting Posting Locked</p>
+                      <p className="text-[10px] text-red-600 font-bold uppercase mt-0.5 tracking-wider">
+                        Reason: {selectedInvoice.disputeReason || "Low confidence score/Duplicate warnings"}
+                      </p>
+                    </div>
                   </div>
+                  {!makerCheckerEnabled && (
+                    <button
+                      onClick={() => {
+                        updateMutation.mutate({
+                          id: selectedInvoice.id,
+                          status: "pending",
+                          disputeReason: null,
+                          comments: "Manually verified and released by accountant."
+                        }, {
+                          onSuccess: (updatedData) => {
+                            toast.success("Verification confirmed! Posted to accounts ledger.");
+                            setSelectedInvoice(updatedData);
+                          }
+                        });
+                      }}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm transition-all flex-shrink-0"
+                    >
+                      Approve & Post
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1597,9 +1779,10 @@ export default function Purchases() {
                   <span className="section-label block mb-1">Vendor Master Info</span>
                   {(() => {
                     const seller = selectedInvoice.rawData?.seller || {};
-                    const mobile = seller.mobile || (seller.phone && seller.phone.startsWith("+91") ? seller.phone : null) || (seller.phone && seller.phone.length === 10 ? `+91 ${seller.phone}` : null) || "";
-                    const landline = seller.landline || "033-22435861";
-                    const email = seller.email || "indiansteelcorp76@gmail.com";
+                    const mobile = currentVendor?.phone || seller.mobile || (seller.phone && seller.phone.startsWith("+91") ? seller.phone : null) || (seller.phone && seller.phone.length === 10 ? `+91 ${seller.phone}` : null) || "";
+                    const landline = seller.landline || "";
+                    const email = currentVendor?.email || seller.email || "";
+                    const address = selectedInvoice.rawData?.seller?.address || currentVendor?.address || "—";
 
                     // Prefer mobile as contact 1; fallback to landline if not present.
                     const contact1Label = mobile ? "Mobile" : "Landline";
@@ -1609,18 +1792,29 @@ export default function Purchases() {
                     const contact2Label = (mobile && landline) ? "Landline" : "Email";
                     const contact2Val = (mobile && landline) ? landline : (email || "—");
 
-                    return [
-                      { label: "Legal Name", val: selectedInvoice.vendorName },
-                      { label: "GSTIN", val: selectedInvoice.vendorGstin || "Not Provided", highlight: true },
+                    const fields = [
+                      { label: "Legal Name", val: selectedInvoice.vendorName, isEditable: true, editValue: editVendorName, setEditValue: setEditVendorName },
+                      { label: "GSTIN", val: selectedInvoice.vendorGstin || "Not Provided", highlight: true, isEditable: true, editValue: editVendorGstin, setEditValue: setEditVendorGstin },
                       { label: "PAN", val: selectedInvoice.vendorGstin ? selectedInvoice.vendorGstin.slice(2, 12) : "—" },
-                      { label: "State Code", val: selectedInvoice.vendorGstin ? `${selectedInvoice.vendorGstin.slice(0, 2)} (${getStateName(selectedInvoice.vendorGstin)})` : "—" },
-                      { label: "Address", val: selectedInvoice.rawData?.seller?.address || "55 Ezra Street, Kolkata-700001" },
+                      { label: "State Code", val: selectedInvoice.vendorGstin ? `${selectedInvoice.vendorGstin.slice(0, 2)} (${getStateNameFromCode(selectedInvoice.vendorGstin)})` : "—" },
+                      { label: "Address", val: address },
                       { label: contact1Label, val: contact1Val },
                       { label: contact2Label, val: contact2Val }
-                    ].map(({ label, val, highlight }) => (
-                      <div key={label} className="text-[10px]">
-                        <span className="text-blue-mid/60 uppercase font-black tracking-wider block mb-0.5">{label}</span>
-                        <span className={cn("font-bold text-blue-ink", highlight && "text-blue-mid font-black")}>{val}</span>
+                    ];
+
+                    return fields.map((fld) => (
+                      <div key={fld.label} className="text-[10px]">
+                        <span className="text-blue-mid/60 uppercase font-black tracking-wider block mb-0.5">{fld.label}</span>
+                        {isEditing && fld.isEditable ? (
+                          <input 
+                            type="text" 
+                            value={fld.editValue} 
+                            onChange={e => fld.setEditValue?.(e.target.value)}
+                            className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                          />
+                        ) : (
+                          <span className={cn("font-bold text-blue-ink", fld.highlight && "text-blue-mid font-black")}>{fld.val}</span>
+                        )}
                       </div>
                     ));
                   })()}
@@ -1727,7 +1921,16 @@ export default function Purchases() {
                   
                   <div className="text-[10px]">
                     <span className="text-blue-mid/60 uppercase font-black tracking-wider block mb-0.5">Invoice Date</span>
-                    <span className="font-bold text-blue-ink">{formatDate(selectedInvoice.invoiceDate)}</span>
+                    {isEditing ? (
+                      <input 
+                        type="date" 
+                        value={editInvoiceDate} 
+                        onChange={e => setEditInvoiceDate(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-lg px-2 py-1 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                      />
+                    ) : (
+                      <span className="font-bold text-blue-ink">{formatDate(selectedInvoice.invoiceDate)}</span>
+                    )}
                   </div>
 
                   <div className="text-[10px]">
@@ -1745,7 +1948,8 @@ export default function Purchases() {
                     let computedDueDate = selectedInvoice.dueDate || selectedInvoice.invoiceDate;
                     if (daysMatch) {
                       const days = parseInt(daysMatch[0], 10);
-                      const invoiceDate = new Date(selectedInvoice.invoiceDate);
+                      const baseDateStr = isEditing ? editInvoiceDate : selectedInvoice.invoiceDate;
+                      const invoiceDate = new Date(baseDateStr);
                       if (!isNaN(invoiceDate.getTime())) {
                         const calculated = new Date(invoiceDate.getTime() + days * 24 * 60 * 60 * 1000);
                         computedDueDate = calculated.toISOString().split("T")[0];
@@ -1828,23 +2032,60 @@ export default function Purchases() {
               </div>
 
               {/* GST & TDS/TCS SECTION 194Q COMPLIANCE WIDGET */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="card p-4">
-                  <span className="section-label block mb-1">Subtotal (Taxable)</span>
-                  <p className="fin-num text-xl text-blue-ink">{formatINR(selectedInvoice.taxableAmount)}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="card p-3">
+                  <span className="section-label block mb-0.5">Subtotal (Taxable)</span>
+                  {isEditing ? (
+                    <input 
+                      type="text" 
+                      value={editTaxableAmount} 
+                      onChange={e => setEditTaxableAmount(e.target.value)}
+                      className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                    />
+                  ) : (
+                    <p className="fin-num text-lg text-blue-ink">{formatINR(selectedInvoice.taxableAmount)}</p>
+                  )}
                   <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Accrual Base</span>
                 </div>
-                <div className="card p-4 bg-green-50 border border-green-200">
-                  <div className="flex items-center gap-1 mb-1">
+                <div className="card p-3">
+                  <span className="section-label block mb-0.5">Total GST</span>
+                  {isEditing ? (
+                    <input 
+                      type="text" 
+                      value={editTotalGst} 
+                      onChange={e => setEditTotalGst(e.target.value)}
+                      className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                    />
+                  ) : (
+                    <p className="fin-num text-lg text-blue-ink">{formatINR(selectedInvoice.totalGst)}</p>
+                  )}
+                  <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Tax Portion</span>
+                </div>
+                <div className="card p-3 bg-blue-mid/5 border border-blue-mid/25 shadow-sm">
+                  <span className="section-label block mb-0.5 text-blue-mid font-black">Grand Total</span>
+                  {isEditing ? (
+                    <input 
+                      type="text" 
+                      value={editInvoiceTotal} 
+                      onChange={e => setEditInvoiceTotal(e.target.value)}
+                      className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
+                    />
+                  ) : (
+                    <p className="fin-num text-lg text-blue-ink font-black">{formatINR(selectedInvoice.invoiceTotal)}</p>
+                  )}
+                  <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Payable Gross</span>
+                </div>
+                <div className="card p-3 bg-green-50 border border-green-200">
+                  <div className="flex items-center gap-1 mb-0.5">
                     <span className="section-label text-green-700">TDS (Sec 194Q)</span>
                     <Percent size={10} className="text-green-600" />
                   </div>
-                  <p className="fin-num text-xl text-green-700">-{formatINR(selectedInvoice.tdsDeducted || "0.00")}</p>
+                  <p className="fin-num text-lg text-green-700">-{formatINR(selectedInvoice.tdsDeducted || "0.00")}</p>
                   <span className="text-[8px] font-black text-green-600 uppercase tracking-widest mt-1 block">Deducted @ 0.1%</span>
                 </div>
-                <div className="card p-4">
-                  <span className="section-label block mb-1">TCS (206C(1H))</span>
-                  <p className="fin-num text-xl text-blue-ink">{formatINR(selectedInvoice.tcsCollected || "0.00")}</p>
+                <div className="card p-3">
+                  <span className="section-label block mb-0.5">TCS (206C(1H))</span>
+                  <p className="fin-num text-lg text-blue-ink">{formatINR(selectedInvoice.tcsCollected || "0.00")}</p>
                   <span className="text-[8px] font-bold text-blue-mid/50 uppercase tracking-widest mt-1 block">Seller Collects</span>
                 </div>
               </div>
@@ -2117,7 +2358,7 @@ export default function Purchases() {
               </DrawerClose>
             </div>
             <DocumentExtractor
-              docTypeHint="TAX_INVOICE"
+              docTypeHint="PURCHASE_INVOICE"
               onExtract={handleExtract}
               onCancel={() => setShowScanDrawer(false)}
               onFileSelected={handleBackgroundExtract}

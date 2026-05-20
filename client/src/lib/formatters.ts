@@ -65,3 +65,33 @@ export function fulfillmentPct(ordered: number, received: number): number {
   if (!ordered) return 0;
   return Math.min(100, (received / ordered) * 100);
 }
+
+/** Get state name from GSTIN state code */
+export function getStateNameFromCode(code: string): string {
+  const codes: Record<string, string> = {
+    "19": "West Bengal",
+    "27": "Maharashtra",
+    "07": "Delhi",
+    "09": "Uttar Pradesh",
+    "33": "Tamil Nadu",
+    "29": "Karnataka",
+    "36": "Telangana",
+    "37": "Andhra Pradesh",
+    "24": "Gujarat",
+    "06": "Haryana",
+    "08": "Rajasthan",
+    "10": "Bihar",
+    "20": "Jharkhand",
+    "21": "Odisha",
+    "23": "Madhya Pradesh",
+    "25": "Dadra and Nagar Haveli",
+    "32": "Kerala",
+  };
+  return codes[code] || "Other State";
+}
+
+/** Get state code from GSTIN */
+export function getStateCodeFromGstin(gstin: string): string {
+  if (!gstin || gstin.length < 2) return "—";
+  return gstin.slice(0, 2);
+}
