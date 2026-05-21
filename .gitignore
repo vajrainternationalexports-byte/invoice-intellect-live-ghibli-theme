@@ -13,3 +13,7 @@ vite.config.ts.*
 
 # Environment logs
 *.log
+
+# Large media assets
+attached_assets/*.MP4
+attached_assets/*.mp4
