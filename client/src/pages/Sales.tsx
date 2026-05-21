@@ -1613,14 +1613,28 @@ export default function Sales() {
                       <span className="font-bold text-blue-ink">{selectedInvoice.rawData?.buyer?.mobile || editBuyerMobile || "—"}</span>
                     )}
                   </div>
-                  <div>
-                    <span className="text-blue-mid font-medium block">Phone:</span>
-                    {isEditing ? (
-                      <input type="text" value={editBuyerPhone} onChange={e => setEditBuyerPhone(e.target.value)} className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full" />
-                    ) : (
-                      <span className="font-bold text-blue-ink">{selectedInvoice.rawData?.buyer?.phone || editBuyerPhone || "—"}</span>
-                    )}
-                  </div>
+                  {(() => {
+                    const mobileVal = selectedInvoice.rawData?.buyer?.mobile || editBuyerMobile || "";
+                    const phoneVal = selectedInvoice.rawData?.buyer?.phone || editBuyerPhone || "";
+                    const cleanMobile = mobileVal.replace(/\D/g, "");
+                    const cleanPhone = phoneVal.replace(/\D/g, "");
+                    const isDuplicate = cleanMobile && cleanPhone && (
+                      cleanMobile === cleanPhone ||
+                      (cleanMobile.length >= 10 && cleanPhone.length >= 10 && cleanMobile.endsWith(cleanPhone.slice(-10))) ||
+                      (cleanMobile.length >= 10 && cleanPhone.length >= 10 && cleanPhone.endsWith(cleanMobile.slice(-10)))
+                    );
+                    if (isDuplicate) return null;
+                    return (
+                      <div>
+                        <span className="text-blue-mid font-medium block">Phone:</span>
+                        {isEditing ? (
+                          <input type="text" value={editBuyerPhone} onChange={e => setEditBuyerPhone(e.target.value)} className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full" />
+                        ) : (
+                          <span className="font-bold text-blue-ink">{phoneVal || "—"}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div>
                     <span className="text-blue-mid font-medium block">Email:</span>
                     {isEditing ? (

@@ -371,7 +371,6 @@ export default function Purchases() {
   const [filterMonth, setFilterMonth] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
   const [filterPaid, setFilterPaid] = useState("all");
-  const [filterItem, setFilterItem] = useState("");
 
   // Pinned Filters (Users select exactly 3 filters to be permanently shown on dashboard)
   const [pinnedFilters, setPinnedFilters] = useState<string[]>(["location", "tds", "seller"]);
@@ -952,15 +951,6 @@ export default function Purchases() {
     if (filterPaid === "paid" && inv.status !== "processed") return false;
     if (filterPaid === "unpaid" && inv.status === "processed") return false;
 
-    // 11. Item-Wise Recognition Filter
-    if (filterItem.trim()) {
-      const itemQuery = filterItem.toLowerCase().trim();
-      const matchesItem = inv.lineItems?.some((li: any) => 
-        (li.item || "").toLowerCase().includes(itemQuery)
-      );
-      if (!matchesItem) return false;
-    }
-
     // 12. Category Segment Filter
     if (filterSegment !== "all" && (inv.category || "Steel") !== filterSegment) return false;
 
@@ -1271,22 +1261,6 @@ export default function Purchases() {
                   </select>
                 );
               }
-              if (fId === "item") {
-                return (
-                  <div key={fId} className="relative flex items-center">
-                    <input 
-                      type="text"
-                      placeholder="Item keyword..."
-                      value={filterItem}
-                      onChange={e => setFilterItem(e.target.value)}
-                      className="bg-white text-[9px] font-black uppercase tracking-wider text-blue-ink rounded-full pl-2.5 pr-6 py-1 border border-blue-mid/10 focus:outline-none transition-all w-24"
-                    />
-                    {filterItem && (
-                      <button onClick={() => setFilterItem("")} className="absolute right-2 text-blue-mid/60 text-[9px] font-bold">×</button>
-                    )}
-                  </div>
-                );
-              }
               return null;
             })}
           </div>
@@ -1369,18 +1343,6 @@ export default function Purchases() {
                     <option value="paid">Paid</option>
                     <option value="unpaid">Unpaid</option>
                   </select>
-                ) },
-                { id: "item", label: "Item-Wise Recognition", component: (
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      placeholder="Search specific item name..." 
-                      value={filterItem} 
-                      onChange={e => setFilterItem(e.target.value)} 
-                      className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 pr-8 text-xs font-bold text-blue-ink"
-                    />
-                    {filterItem && <button onClick={() => setFilterItem("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-blue-mid font-black text-xs">×</button>}
-                  </div>
                 ) }
               ].map(({ id: fId, label, component, grnOnly }) => {
                 if (grnOnly && !grnSystemEnabled) return null;
@@ -2024,8 +1986,16 @@ export default function Purchases() {
 
                     // Deduplicate Phone and Mobile if they match
                     let phoneStr = seller.phone || landline || "";
-                    if (mobile && phoneStr && mobile.replace(/[^a-zA-Z0-9]/g, "") === phoneStr.replace(/[^a-zA-Z0-9]/g, "")) {
-                      phoneStr = "";
+                    if (mobile && phoneStr) {
+                      const cleanMobile = mobile.replace(/\D/g, "");
+                      const cleanPhone = phoneStr.replace(/\D/g, "");
+                      if (
+                        cleanMobile === cleanPhone ||
+                        (cleanMobile.length >= 10 && cleanPhone.length >= 10 && cleanMobile.endsWith(cleanPhone.slice(-10))) ||
+                        (cleanMobile.length >= 10 && cleanPhone.length >= 10 && cleanPhone.endsWith(cleanMobile.slice(-10)))
+                      ) {
+                        phoneStr = "";
+                      }
                     }
 
                     const fields = [
