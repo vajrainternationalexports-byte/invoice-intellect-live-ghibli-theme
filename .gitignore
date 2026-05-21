@@ -4,6 +4,7 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env
 
 # System caches and temp folders
 .npm_cache/
