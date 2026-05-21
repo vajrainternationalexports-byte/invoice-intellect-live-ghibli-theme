@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import {
   insertVendorSchema,
   insertPurchaseInvoiceSchema,
@@ -59,12 +60,28 @@ INDIA ELECTRICALS SYNDICATE KNOWN DATA:
 
 const EXTRACTION_PROMPTS: Record<string, string> = {
   TAX_INVOICE: `This document is a Sales Tax Invoice issued BY India Electricals Syndicate. Extract all data into this exact JSON schema. Return JSON only.
+CRITICAL INSTRUCTIONS FOR 150% ACCURACY:
+1. Vendor/Seller details: Name, Address, GSTIN, Phone, Mobile, Email, and Bank Account Details (Holder, Account No, Bank Name, IFSC) must be extracted with absolute correctness.
+2. Phone/Mobile Logic: If the document shows the same number for Phone and Mobile, DO NOT duplicate it. Put it in one field and leave the other null.
+3. Logistics: Extract E-Way Bill Number under 'e_way_bill_no' and Vehicle Number under 'vehicle_number'.
+4. Logical Reasoning (Quantity & Total): If Quantity is missing or unclear but you have 'Total Amount' and 'Price Per Unit' (Rate), you MUST back-calculate the Quantity (Quantity = Total Amount / Price Per Unit). Always cross-check the extracted Quantity by multiplying it with Price Per Unit to ensure 100% mathematical accuracy.
+5. Grand Total Verification: Extract the numeric grand total under 'totals.invoice_total'. Extract the exact text representation of the total under 'totals.amount_in_words'. The amount in words is the absolute source of truth for the grand total.
+6. Calculations: Ensure sub_total_taxable + total_gst matches invoice_total (adjusting for round_off). Verify line items sum up to the taxable subtotal.
+7. Flagging Mechanism (CRITICAL): If you detect ANY discrepancy (e.g. amount in words does not match the numeric total, line items don't sum up correctly, or data is missing/illegible), you MUST provide a detailed explanation in the 'dispute_reason' field at the root of the JSON. If everything is perfect, leave 'dispute_reason' null.
 
-{"document_type":"TAX_INVOICE","invoice_no":null,"invoice_date":null,"financial_year":null,"e_way_bill_no":null,"place_of_supply_state":null,"supply_type":null,"po_number":null,"seller":{"name":"India Electricals Syndicate","gstin":"19AAAFI6886Q1ZE","bank_account_no":"12422020001109","bank_ifsc":"HDFC0001242"},"bill_to":{"company_name":null,"address_line1":null,"city":null,"state":null,"state_code":null,"pincode":null,"gstin":null},"ship_to":{"company_name":null,"site_name":null,"address_line1":null,"city":null,"state":null,"pincode":null},"line_items":[{"sl_no":1,"description":null,"hsn_sac":null,"quantity":null,"unit":null,"price_per_unit":null,"taxable_amount":null,"cgst_rate":null,"cgst_amount":null,"sgst_rate":null,"sgst_amount":null,"igst_rate":null,"igst_amount":null,"total_amount":null}],"totals":{"sub_total_taxable":null,"total_cgst":null,"total_sgst":null,"total_igst":null,"total_gst":null,"round_off":null,"invoice_total":null,"amount_in_words":null},"irn_number":null,"is_e_invoice":null,"reverse_charge_applicable":false}`,
+{"document_type":"TAX_INVOICE","invoice_no":null,"invoice_date":null,"financial_year":null,"e_way_bill_no":null,"vehicle_number":null,"place_of_supply_state":null,"supply_type":null,"po_number":null,"seller":{"name":"India Electricals Syndicate","gstin":"19AAAFI6886Q1ZE","address":"55 Ezra Street, 2nd Floor, Kolkata-700001","phone":"+91 33 2242 9873","bank_details":{"account_holder":"India Electricals Syndicate","account_number":"12422020001109","bank_name":"HDFC Bank","ifsc":"HDFC0001242"}},"bill_to":{"company_name":null,"address":null,"phone":null,"mobile":null,"email":null,"gstin":null},"ship_to":{"company_name":null,"address":null},"line_items":[{"sl_no":1,"description":null,"hsn_sac":null,"quantity":null,"unit":null,"price_per_unit":null,"taxable_amount":null,"cgst_rate":null,"cgst_amount":null,"sgst_rate":null,"sgst_amount":null,"igst_rate":null,"igst_amount":null,"total_amount":null}],"totals":{"sub_total_taxable":null,"total_cgst":null,"total_sgst":null,"total_igst":null,"total_gst":null,"round_off":null,"invoice_total":null,"amount_in_words":null},"irn_number":null,"is_e_invoice":null,"reverse_charge_applicable":false,"dispute_reason":null}`,
 
   PURCHASE_INVOICE: `This document is a Tax Invoice/Bill issued TO India Electricals Syndicate BY a vendor (seller). Extract all data into this exact JSON schema. Return JSON only.
+CRITICAL INSTRUCTIONS FOR 150% ACCURACY:
+1. Vendor/Seller details: Extract Name, GSTIN, Address, Phone, Mobile, Email, and Bank Account Details (Account Holder Name, Account Number, Bank Name, IFSC code) with absolute precision.
+2. Phone/Mobile Logic: If the document shows the same number for Phone and Mobile, DO NOT duplicate it. Put it in one field and leave the other null. Avoid redundancy.
+3. Logistics: Extract E-Way Bill Number under 'e_way_bill_no' and Vehicle Number under 'vehicle_number'.
+4. Logical Reasoning (Quantity & Total): If Quantity is missing or unclear but you have 'Total Amount' and 'Price Per Unit' (Rate), you MUST back-calculate the Quantity (Quantity = Total Amount / Price Per Unit). Always cross-check the extracted Quantity by multiplying it with Price Per Unit to ensure 100% mathematical accuracy.
+5. Grand Total Verification: Extract the numeric grand total under 'totals.invoice_total'. Extract the exact text representation of the total under 'totals.amount_in_words'. The amount in words is the absolute source of truth for the grand total.
+6. Calculations: Ensure sub_total_taxable + total_gst matches invoice_total (adjusting for round_off). Verify line items sum up to the taxable subtotal.
+7. Flagging Mechanism (CRITICAL): If you detect ANY discrepancy (e.g. amount in words does not match the numeric total, line items don't sum up correctly, or data is missing/illegible), you MUST provide a detailed explanation in the 'dispute_reason' field at the root of the JSON. If everything is perfect, leave 'dispute_reason' null.
 
-{"document_type":"PURCHASE_INVOICE","invoice_no":null,"invoice_date":null,"financial_year":null,"e_way_bill_no":null,"place_of_supply_state":null,"supply_type":null,"po_number":null,"seller":{"name":null,"gstin":null,"bank_account_no":null,"bank_ifsc":null},"bill_to":{"company_name":"India Electricals Syndicate","address_line1":"55, Ezra Street, 1st Floor, Kolkata - 700001","city":"Kolkata","state":"West Bengal","state_code":"19","pincode":"700001","gstin":"19AAAFI6886Q1ZE"},"ship_to":{"company_name":null,"site_name":null,"address_line1":null,"city":null,"state":null,"pincode":null},"line_items":[{"sl_no":1,"description":null,"hsn_sac":null,"quantity":null,"unit":null,"price_per_unit":null,"taxable_amount":null,"cgst_rate":null,"cgst_amount":null,"sgst_rate":null,"sgst_amount":null,"igst_rate":null,"igst_amount":null,"total_amount":null}],"totals":{"sub_total_taxable":null,"total_cgst":null,"total_sgst":null,"total_igst":null,"total_gst":null,"round_off":null,"invoice_total":null,"amount_in_words":null},"irn_number":null,"is_e_invoice":null,"reverse_charge_applicable":false}`,
+{"document_type":"PURCHASE_INVOICE","invoice_no":null,"invoice_date":null,"financial_year":null,"e_way_bill_no":null,"vehicle_number":null,"place_of_supply_state":null,"supply_type":null,"po_number":null,"seller":{"name":null,"gstin":null,"address":null,"phone":null,"mobile":null,"email":null,"bank_details":{"account_holder":null,"account_number":null,"bank_name":null,"ifsc":null}},"bill_to":{"company_name":"India Electricals Syndicate","address":"55, Ezra Street, 1st Floor, Kolkata - 700001","phone":"+91 33 2242 9873","gstin":"19AAAFI6886Q1ZE"},"ship_to":{"company_name":null,"address":null},"line_items":[{"sl_no":1,"description":null,"hsn_sac":null,"quantity":null,"unit":null,"price_per_unit":null,"taxable_amount":null,"cgst_rate":null,"cgst_amount":null,"sgst_rate":null,"sgst_amount":null,"igst_rate":null,"igst_amount":null,"total_amount":null}],"totals":{"sub_total_taxable":null,"total_cgst":null,"total_sgst":null,"total_igst":null,"total_gst":null,"round_off":null,"invoice_total":null,"amount_in_words":null},"irn_number":null,"is_e_invoice":null,"reverse_charge_applicable":false,"dispute_reason":null}`,
 
   PURCHASE_ORDER: `This document is a Purchase Order addressed TO India Electricals Syndicate from a client/buyer. Extract all data. Return JSON only.
 
@@ -124,7 +141,9 @@ async function resolveOrCreateVendor(
   vendorName: string,
   vendorGstin?: string,
   address?: string,
-  bankDetails?: any
+  bankDetails?: any,
+  phone?: string,
+  email?: string
 ): Promise<Vendor | undefined> {
   if (!vendorName) return undefined;
 
@@ -143,6 +162,22 @@ async function resolveOrCreateVendor(
   }
 
   if (matchedVendor) {
+    // Enrich existing vendor details if they are currently blank
+    const vendorUpdates: any = {};
+    if (address && !matchedVendor.address) vendorUpdates.address = address;
+    if (phone && !matchedVendor.phone) vendorUpdates.phone = phone;
+    if (email && !matchedVendor.email) vendorUpdates.email = email;
+    if (Object.keys(vendorUpdates).length > 0) {
+      try {
+        await storage.updateVendor(matchedVendor.id, vendorUpdates);
+        // Refresh matchedVendor
+        const updated = await storage.getVendor(matchedVendor.id);
+        if (updated) matchedVendor = updated;
+      } catch (err) {
+        console.error("Failed to enrich matched vendor info:", err);
+      }
+    }
+
     // If bank details were extracted by OCR, and the matched vendor doesn't have bank details,
     // check if we can add a bank account for them
     if (bankDetails && bankDetails.account_number) {
@@ -182,8 +217,8 @@ async function resolveOrCreateVendor(
       stateCode: stateCode,
       pincode: address ? (address.match(/\b\d{6}\b/)?.[0] || null) : null,
       contactPerson: "Finance Manager",
-      phone: null,
-      email: null,
+      phone: phone || null,
+      email: email || null,
       vendorType: "supplier"
     });
 
@@ -357,18 +392,124 @@ function robustJsonParse(rawText: string): any {
   }
 }
 
+function parseWordsToNumber(text: string): number | null {
+  if (!text) return null;
+  const clean = text.toLowerCase()
+    .replace(/rupees/g, "")
+    .replace(/rupee/g, "")
+    .replace(/only/g, "")
+    .replace(/,/g, " ")
+    .replace(/-/g, " ")
+    .trim();
+
+  let mainPart = clean;
+  let paisePart = "";
+
+  const map: Record<string, number> = {
+    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+    eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+    twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+    hundred: 100,
+    thousand: 1000,
+    lakh: 100000, lakhs: 100000,
+    crore: 10000000, crores: 10000000,
+    million: 1000000, billion: 1000000000
+  };
+
+  if (clean.includes("paise")) {
+    const beforePaise = clean.split("paise")[0].trim();
+    const andIndex = beforePaise.lastIndexOf(" and ");
+    if (andIndex !== -1) {
+      mainPart = beforePaise.substring(0, andIndex).trim();
+      paisePart = beforePaise.substring(andIndex + 5).trim();
+    } else {
+      const words = beforePaise.split(/\s+/);
+      if (words.length > 1) {
+        const lastWord = words[words.length - 1];
+        if (map[lastWord] !== undefined || !isNaN(parseInt(lastWord))) {
+          paisePart = lastWord;
+          mainPart = words.slice(0, -1).join(" ");
+        }
+      }
+    }
+  } else if (clean.includes("point")) {
+    const parts = clean.split("point");
+    mainPart = parts[0];
+    paisePart = parts[1] || "";
+  }
+
+  const getVal = (partStr: string): number => {
+    const words = partStr.split(/\s+/).filter(Boolean);
+    let total = 0;
+    let currentGroup = 0;
+    
+    for (const word of words) {
+      if (map[word] !== undefined) {
+        const val = map[word];
+        if (val === 100) {
+          currentGroup = (currentGroup || 1) * 100;
+        } else if (val >= 1000) {
+          total += (currentGroup || 1) * val;
+          currentGroup = 0;
+        } else {
+          currentGroup += val;
+        }
+      } else {
+        const num = parseInt(word);
+        if (!isNaN(num)) {
+          currentGroup += num;
+        }
+      }
+    }
+    total += currentGroup;
+    return total;
+  };
+
+  const mainVal = getVal(mainPart);
+  const paiseVal = paisePart ? getVal(paisePart) : 0;
+  
+  const finalVal = mainVal + (paiseVal / 100);
+  return finalVal > 0 ? finalVal : null;
+}
+
 function processAndValidateOcrResult(data: any): any {
   if (!data || typeof data !== "object") return data;
   
   const docType = data.document_type || "AUTO_DETECT";
   
   if (docType === "TAX_INVOICE" || docType === "PURCHASE_INVOICE") {
-    // 1. Normalize GSTINs
+    // Normalize logistics keys
+    if (data.e_way_bill_no && !data.eWayBillNumber) {
+      data.eWayBillNumber = data.e_way_bill_no;
+    }
+    if (data.e_way_bill_no && !data.eWayBill) {
+      data.eWayBill = data.e_way_bill_no;
+    }
+    if (data.vehicle_number && !data.vehicleNumber) {
+      data.vehicleNumber = data.vehicle_number;
+    }
+    if (data.vehicle_number && !data.vehicleNo) {
+      data.vehicleNo = data.vehicle_number;
+    }
+    if (data.payment_terms && !data.paymentTerms) {
+      data.paymentTerms = data.payment_terms;
+    }
+    if (data.payment_mode && !data.paymentMode) {
+      data.paymentMode = data.payment_mode;
+    }
+
+    // 1. Normalize GSTINs and derive PAN
     if (data.seller) {
       data.seller.gstin = normalizeGstin(data.seller.gstin);
+      if (data.seller.gstin && data.seller.gstin.length === 15) {
+        data.seller.pan = data.seller.gstin.substring(2, 12);
+      }
     }
     if (data.bill_to) {
       data.bill_to.gstin = normalizeGstin(data.bill_to.gstin);
+      if (data.bill_to.gstin && data.bill_to.gstin.length === 15) {
+        data.bill_to.pan = data.bill_to.gstin.substring(2, 12);
+      }
     }
     
     // 2. Normalize dates
@@ -494,6 +635,21 @@ function processAndValidateOcrResult(data: any): any {
     
     data.totals.round_off = Number((roundedTotal - rawTotal).toFixed(2));
     data.totals.invoice_total = roundedTotal;
+    
+    // Cross-verify numeric invoice total with Amount in Words
+    const amountInWords = data.totals.amount_in_words;
+    if (amountInWords) {
+      const parsedWordsTotal = parseWordsToNumber(amountInWords);
+      if (parsedWordsTotal !== null) {
+        const diff = Math.abs(roundedTotal - parsedWordsTotal);
+        if (diff > 2.0) {
+          data.confidence_score = 75; // Lower confidence to trigger manual review
+          const mismatchMsg = `Amount verification mismatch: Numeric total is ₹${roundedTotal} but Words total is ₹${parsedWordsTotal.toFixed(2)}`;
+          data.dispute_reason = data.dispute_reason ? `${data.dispute_reason} | ${mismatchMsg}` : mismatchMsg;
+          data.disputeReason = data.dispute_reason;
+        }
+      }
+    }
     
     if (data.confidence_score === undefined) {
       data.confidence_score = 98;
@@ -647,6 +803,44 @@ async function tryExtractWithOpenAI(
   return { parsed, rawText };
 }
 
+async function tryExtractTextWithOpenAI(
+  extractedText: string,
+  userPrompt: string,
+  openaiKey: string
+): Promise<{ parsed: any; rawText: string }> {
+  const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${openaiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: MASTER_SYSTEM_PROMPT },
+        { role: "user", content: `You are given the raw extracted text of a document. Parse it and return the structured JSON according to the schema.
+
+Raw Text:
+${extractedText}
+
+Instructions:
+${userPrompt}` }
+      ],
+      response_format: { type: "json_object" }
+    }),
+  });
+
+  if (!openaiRes.ok) {
+    const errText = await openaiRes.text();
+    throw new Error(`OpenAI Text API error (status ${openaiRes.status}): ${errText}`);
+  }
+
+  const openaiData = await openaiRes.json() as any;
+  const rawText = openaiData.choices?.[0]?.message?.content || "";
+  const parsed = robustJsonParse(rawText);
+  return { parsed, rawText };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -738,6 +932,47 @@ export async function registerRoutes(
           errorsOccurred.push(`OpenAI: ${err.message}`);
           try {
             fs.appendFileSync(path.join(process.cwd(), "ocr_errors.log"), `${new Date().toISOString()} - OpenAI failed: ${err.message}\n`);
+          } catch (logErr) {}
+        }
+      }
+
+      if (!parsedData && mimeType === "application/pdf" && openaiKey) {
+        try {
+          console.log("Attempting PDF text extraction via local python script + OpenAI GPT-4o...");
+          usedProvider = "OpenAI GPT-4o (PDF Text Fallback)";
+          
+          const tempPdfPath = path.join(process.cwd(), `temp_${Date.now()}_ocr.pdf`);
+          fs.writeFileSync(tempPdfPath, Buffer.from(fileBase64, "base64"));
+
+          try {
+            const pythonScript = path.join(process.cwd(), "extract_pdf_text.py");
+            const stdout = execSync(`python3 "${pythonScript}" "${tempPdfPath}"`, { encoding: "utf8", timeout: 15000 });
+            
+            const separator = `--- EXTRACTED TEXT FROM ${path.basename(tempPdfPath)} ---`;
+            let extractedText = stdout;
+            if (stdout.includes(separator)) {
+              extractedText = stdout.split(separator)[1] || stdout;
+            }
+            
+            extractedText = extractedText.trim();
+            if (!extractedText) {
+              throw new Error("No text extracted from PDF");
+            }
+            
+            console.log(`Extracted ${extractedText.length} characters from PDF. Calling OpenAI...`);
+            const resOcr = await tryExtractTextWithOpenAI(extractedText, userPrompt, openaiKey);
+            parsedData = resOcr.parsed;
+            rawText = resOcr.rawText;
+          } finally {
+            if (fs.existsSync(tempPdfPath)) {
+              fs.unlinkSync(tempPdfPath);
+            }
+          }
+        } catch (err: any) {
+          console.error("OpenAI PDF fallback failed:", err.message);
+          errorsOccurred.push(`OpenAI (PDF text fallback): ${err.message}`);
+          try {
+            fs.appendFileSync(path.join(process.cwd(), "ocr_errors.log"), `${new Date().toISOString()} - OpenAI PDF fallback failed: \${err.message}\n`);
           } catch (logErr) {}
         }
       }
@@ -979,6 +1214,62 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // ─── AI Voice Agent ──────────────────────────────────────────
+  app.post("/api/ai-voice-agent", async (req, res) => {
+    try {
+      const { transcript, contextMode, invoiceData } = req.body;
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        return res.status(500).json({ error: "OpenAI API key missing" });
+      }
+      
+      const systemPrompt = `You are an AI assistant for Invoice Intellect. Convert user voice commands into JSON intent.
+Context: ${contextMode === "global" ? "Main Dashboard (Search Invoices)" : "Detailed Invoice Drawer (Editing Invoice)"}
+${contextMode === "invoice" ? "Current Invoice JSON:\\n" + JSON.stringify(invoiceData, null, 2) : ""}
+
+Return ONLY a JSON object:
+For GLOBAL context (search):
+{"intent": "SEARCH_INVOICES", "searchQuery": "text to type in search bar, e.g. vendor name or item name", "message": "human response"}
+
+For INVOICE context (editing):
+{"intent": "EDIT_INVOICE", "edits": {"lineItemIndex": 0, "rate": 450, "quantity": 10}, "message": "human response to show before confirmation"}
+Note: lineItemIndex should be the 0-based array index of the item they want to edit. Rate and quantity can be null if not requested.`;
+
+      const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: transcript }
+          ],
+          response_format: { type: "json_object" }
+        }),
+      });
+
+      if (!openaiRes.ok) throw new Error("OpenAI API error");
+      const openaiData = await openaiRes.json() as any;
+      const rawText = openaiData.choices?.[0]?.message?.content || "{}";
+      
+      // Basic JSON extraction if wrapped in backticks
+      let cleanText = rawText.trim();
+      if (cleanText.startsWith("\`\`\`json")) {
+        cleanText = cleanText.replace(/\`\`\`json/g, "").replace(/\`\`\`/g, "").trim();
+      } else if (cleanText.startsWith("\`\`\`")) {
+        cleanText = cleanText.replace(/\`\`\`/g, "").trim();
+      }
+      
+      return res.json(JSON.parse(cleanText));
+    } catch (err: any) {
+      console.error("AI Voice Agent Error:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ─── Purchase Invoices ──────────────────────────────────────────
   app.get("/api/purchase-invoices", async (_req, res) => {
     res.json(await storage.listPurchaseInvoices());
@@ -999,7 +1290,7 @@ export async function registerRoutes(
       if (body.vendorName && !body.vendorName.startsWith("Processing:") && (!body.vendorId || body.vendorId === "v1")) {
         const seller = body.rawData?.seller || {};
         try {
-          const resolved = await resolveOrCreateVendor(body.vendorName, body.vendorGstin, seller.address, seller.bank_details);
+          const resolved = await resolveOrCreateVendor(body.vendorName, body.vendorGstin, seller.address, seller.bank_details, seller.phone || seller.mobile, seller.email);
           if (resolved) {
             body.vendorId = resolved.id;
             if (!body.vendorGstin && resolved.gstin) {
@@ -1062,18 +1353,29 @@ export async function registerRoutes(
         body.disputeReason = "Potential duplicate invoice detected (matching number and vendor name)";
       }
 
-      // 4. TDS Section 194Q Threshold check & deduction
-      // If single seller annual purchase exceeds ₹50 Lakh (5,000,000)
+      // 4. TDS Section 194Q & 45 Lakhs Threshold check
       if (body.vendorId) {
-        const vendorInvoices = allInvoices.filter((inv: any) => inv.vendorId === body.vendorId);
+        const currentFy = body.financialYear || "2026-2027";
+        const vendorInvoices = allInvoices.filter((inv: any) => 
+          inv.vendorId === body.vendorId && 
+          (inv.financialYear === currentFy || !inv.financialYear)
+        );
         const ytdTotal = vendorInvoices.reduce((sum: number, inv: any) => sum + parseFloat(inv.invoiceTotal || "0"), 0);
         const currentTotal = parseFloat(body.invoiceTotal || "0");
+        const totalPurchases = ytdTotal + currentTotal;
+
+        // Flag 45 Lakh threshold
+        if (totalPurchases > 4500000) {
+          body.status = "needs_review";
+          const warningMsg = `Vendor total annual purchase (₹${(totalPurchases / 100000).toFixed(2)} Lakhs) exceeds the ₹45 Lakhs threshold`;
+          body.disputeReason = body.disputeReason ? `${body.disputeReason} | ${warningMsg}` : warningMsg;
+        }
+
         const threshold = 5000000; // ₹50 Lakhs
-        
-        if (ytdTotal + currentTotal > threshold) {
+        if (totalPurchases > threshold) {
           body.tcsApplicable = true;
           // Calculate taxable portion exceeding 50L limit
-          const taxableExceeding = Math.max(0, (ytdTotal + currentTotal) - threshold);
+          const taxableExceeding = Math.max(0, totalPurchases - threshold);
           const currentTaxable = parseFloat(body.taxableAmount || "0");
           
           // Deduct 0.1% TDS on the applicable current amount
@@ -1148,7 +1450,7 @@ export async function registerRoutes(
     if (updates.vendorName && !updates.vendorName.startsWith("Processing:") && (!updates.vendorId || updates.vendorId === "v1")) {
       const seller = updates.rawData?.seller || {};
       try {
-        const resolved = await resolveOrCreateVendor(updates.vendorName, updates.vendorGstin, seller.address, seller.bank_details);
+        const resolved = await resolveOrCreateVendor(updates.vendorName, updates.vendorGstin, seller.address, seller.bank_details, seller.phone || seller.mobile, seller.email);
         if (resolved) {
           updates.vendorId = resolved.id;
           if (!updates.vendorGstin && resolved.gstin) {
@@ -1162,6 +1464,38 @@ export async function registerRoutes(
 
     const inv = await storage.updatePurchaseInvoice(req.params.id, updates);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
+
+    // Sync vendor master profile from rawData edits
+    const effectiveVendorId = inv.vendorId || original.vendorId;
+    if (effectiveVendorId) {
+      try {
+        const seller = (inv as any).rawData?.seller || {};
+        const vendorPatch: any = {};
+        if (seller.address) vendorPatch.address = seller.address;
+        if (seller.phone || seller.mobile) vendorPatch.phone = seller.phone || seller.mobile;
+        if (seller.email) vendorPatch.email = seller.email;
+        if (Object.keys(vendorPatch).length > 0) {
+          await storage.updateVendor(effectiveVendorId, vendorPatch);
+        }
+        // Sync bank details
+        if (seller.bank_details && seller.bank_details.account_number) {
+          const existingAccounts = await storage.listVendorBankAccounts(effectiveVendorId);
+          const hasAccount = existingAccounts.some((acc: any) => acc.accountNumber === seller.bank_details.account_number);
+          if (!hasAccount) {
+            await storage.createVendorBankAccount({
+              vendorId: effectiveVendorId,
+              bankName: seller.bank_details.bank_name || "Unknown Bank",
+              accountNumber: seller.bank_details.account_number,
+              ifscCode: seller.bank_details.ifsc || "IFSC0000000",
+              accountHolderName: seller.bank_details.account_holder || inv.vendorName,
+              verificationStatus: "verified"
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync vendor master from PATCH:", err);
+      }
+    }
 
     // Track status change approvals
     if (req.body.status && req.body.status !== original.status) {

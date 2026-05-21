@@ -45,6 +45,16 @@ export default function Sales() {
   const [editTaxableAmount, setEditTaxableAmount] = useState("");
   const [editTotalGst, setEditTotalGst] = useState("");
 
+  // Extended edit states for buyer master & bank
+  const [editBuyerAddress, setEditBuyerAddress] = useState("");
+  const [editBuyerMobile, setEditBuyerMobile] = useState("");
+  const [editBuyerPhone, setEditBuyerPhone] = useState("");
+  const [editBuyerEmail, setEditBuyerEmail] = useState("");
+  const [editBuyerBankHolder, setEditBuyerBankHolder] = useState("");
+  const [editBuyerBankAccountNo, setEditBuyerBankAccountNo] = useState("");
+  const [editBuyerBankName, setEditBuyerBankName] = useState("");
+  const [editBuyerBankIfsc, setEditBuyerBankIfsc] = useState("");
+
   // System Process Flags (Toggles)
   const [dispatchSystemEnabled, setDispatchSystemEnabled] = useState(false);
   const [makerCheckerEnabled, setMakerCheckerEnabled] = useState(false);
@@ -127,6 +137,18 @@ export default function Sales() {
     setEditInvoiceTotal(inv.invoiceTotal || "");
     setEditTaxableAmount(inv.taxableAmount || "");
     setEditTotalGst(inv.totalGst || "");
+
+    // Initialize extended buyer master & bank edit fields
+    const buyer = inv.rawData?.buyer || inv.rawData?.bill_to || {};
+    setEditBuyerAddress(buyer.address || "");
+    setEditBuyerMobile(buyer.mobile || "");
+    setEditBuyerPhone(buyer.phone || "");
+    setEditBuyerEmail(buyer.email || "");
+    const bBank = buyer.bank_details || {};
+    setEditBuyerBankHolder(bBank.account_holder || "");
+    setEditBuyerBankAccountNo(bBank.account_number || "");
+    setEditBuyerBankName(bBank.bank_name || "");
+    setEditBuyerBankIfsc(bBank.ifsc || "");
   };
 
   useEffect(() => {
@@ -413,9 +435,10 @@ export default function Sales() {
             cgstAmount: String(ocrData.totals?.total_cgst ?? "0"),
             sgstAmount: String(ocrData.totals?.total_sgst ?? "0"),
             igstAmount: String(ocrData.totals?.total_igst ?? "0"),
-            status: confidence < 90 ? "needs_review" : "pending",
+            status: (confidence < 90 || ocrData.dispute_reason) ? "needs_review" : "pending",
             lineItems: ocrData.line_items || [],
             ocrConfidence: confidence,
+            disputeReason: ocrData.dispute_reason || null,
             rawData: {
               ...ocrData,
               fileBase64: uploadedBase64,
@@ -516,14 +539,17 @@ export default function Sales() {
   // Stacked Filters Logic + Sorting
   const sortedAndFiltered = useMemo(() => {
     const res = invoices.filter((inv: any) => {
-      // 1. Text search
       const q = search.toLowerCase().trim();
       if (q) {
         const match = 
           (inv.invoiceNo || "").toLowerCase().includes(q) ||
           (inv.customerName || "").toLowerCase().includes(q) ||
           (inv.customerGstin || "").toLowerCase().includes(q) ||
-          (inv.branchLocation || "").toLowerCase().includes(q);
+          (inv.branchLocation || "").toLowerCase().includes(q) ||
+          (Array.isArray(inv.lineItems) && inv.lineItems.some((li: any) =>
+            (li.description || li.item || li.name || "").toLowerCase().includes(q) ||
+            (li.hsn || li.hsn_sac || "").toLowerCase().includes(q)
+          ));
         if (!match) return false;
       }
 
@@ -1440,6 +1466,24 @@ export default function Sales() {
                               invoiceTotal: editInvoiceTotal,
                               taxableAmount: editTaxableAmount,
                               totalGst: editTotalGst,
+                              rawData: {
+                                ...selectedInvoice.rawData,
+                                buyer: {
+                                  ...(selectedInvoice.rawData?.buyer || {}),
+                                  name: editCustomerName,
+                                  gstin: editCustomerGstin,
+                                  address: editBuyerAddress,
+                                  mobile: editBuyerMobile,
+                                  phone: editBuyerPhone,
+                                  email: editBuyerEmail,
+                                  bank_details: {
+                                    account_holder: editBuyerBankHolder,
+                                    account_number: editBuyerBankAccountNo,
+                                    bank_name: editBuyerBankName,
+                                    ifsc: editBuyerBankIfsc,
+                                  }
+                                }
+                              }
                             }, {
                               onSuccess: (updatedData) => {
                                 toast.success("Invoice details saved successfully ✓");
@@ -1550,7 +1594,61 @@ export default function Sales() {
                   </div>
                   <div>
                     <span className="text-blue-mid font-medium block">Consignee Address:</span>
-                    <span className="font-bold text-blue-ink uppercase">{selectedInvoice.rawData?.buyer?.address || "Address on record"}</span>
+                    {isEditing ? (
+                      <input 
+                        type="text" 
+                        value={editBuyerAddress} 
+                        onChange={e => setEditBuyerAddress(e.target.value)}
+                        className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full uppercase"
+                      />
+                    ) : (
+                      <span className="font-bold text-blue-ink uppercase">{selectedInvoice.rawData?.buyer?.address || editBuyerAddress || "Address on record"}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-blue-mid font-medium block">Mobile:</span>
+                    {isEditing ? (
+                      <input type="text" value={editBuyerMobile} onChange={e => setEditBuyerMobile(e.target.value)} className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full" />
+                    ) : (
+                      <span className="font-bold text-blue-ink">{selectedInvoice.rawData?.buyer?.mobile || editBuyerMobile || "—"}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-blue-mid font-medium block">Phone:</span>
+                    {isEditing ? (
+                      <input type="text" value={editBuyerPhone} onChange={e => setEditBuyerPhone(e.target.value)} className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full" />
+                    ) : (
+                      <span className="font-bold text-blue-ink">{selectedInvoice.rawData?.buyer?.phone || editBuyerPhone || "—"}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-blue-mid font-medium block">Email:</span>
+                    {isEditing ? (
+                      <input type="text" value={editBuyerEmail} onChange={e => setEditBuyerEmail(e.target.value)} className="bg-white border border-blue-mid/10 rounded-xl px-2 py-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none w-full" />
+                    ) : (
+                      <span className="font-bold text-blue-ink">{selectedInvoice.rawData?.buyer?.email || editBuyerEmail || "—"}</span>
+                    )}
+                  </div>
+
+                  {/* Buyer Bank Details Collapsible */}
+                  <div className="border-t border-blue-light/50 pt-2 mt-1">
+                    <span className="text-[8px] font-mono uppercase font-black text-blue-mid/60 tracking-wider block mb-1">Buyer Bank Account</span>
+                    {isEditing ? (
+                      <div className="space-y-1.5 text-[9px]">
+                        <div><span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Holder</span><input type="text" value={editBuyerBankHolder} onChange={e => setEditBuyerBankHolder(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none" /></div>
+                        <div><span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Account No</span><input type="text" value={editBuyerBankAccountNo} onChange={e => setEditBuyerBankAccountNo(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none tracking-widest" /></div>
+                        <div><span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Bank Name</span><input type="text" value={editBuyerBankName} onChange={e => setEditBuyerBankName(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none" /></div>
+                        <div><span className="text-blue-mid/50 font-bold uppercase block text-[8px]">IFSC</span><input type="text" value={editBuyerBankIfsc} onChange={e => setEditBuyerBankIfsc(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none tracking-widest" /></div>
+                      </div>
+                    ) : (
+                      <div className="text-[9px] text-blue-ink/60 font-bold">
+                        {selectedInvoice.rawData?.buyer?.bank_details?.account_number ? (
+                          <span>••••{selectedInvoice.rawData.buyer.bank_details.account_number.slice(-4)} · {selectedInvoice.rawData.buyer.bank_details.bank_name || "Bank"}</span>
+                        ) : (
+                          <span className="text-blue-mid/40 uppercase tracking-wider">No buyer bank data on record</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

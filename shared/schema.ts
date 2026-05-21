@@ -75,6 +75,7 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   tdsDeducted: numeric("tds_deducted", { precision: 14, scale: 2 }).default("0.00"),
   tcsCollected: numeric("tcs_collected", { precision: 14, scale: 2 }).default("0.00"),
   disputeReason: text("dispute_reason"),
+  category: text("category").default("Steel"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

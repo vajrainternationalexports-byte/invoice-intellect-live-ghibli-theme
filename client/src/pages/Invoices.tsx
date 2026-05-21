@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { AIVoiceAgent } from "@/components/AIVoiceAgent";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { downloadExcel } from "@/lib/excel-export";
 import { formatINR, formatDate, getStateNameFromCode } from "@/lib/formatters";
@@ -322,6 +323,17 @@ export default function Purchases() {
   const [editInvoiceTotal, setEditInvoiceTotal] = useState("");
   const [editTaxableAmount, setEditTaxableAmount] = useState("");
   const [editTotalGst, setEditTotalGst] = useState("");
+  const [editCategory, setEditCategory] = useState("Steel");
+
+  // Extended edit states for vendor master & bank
+  const [editAddress, setEditAddress] = useState("");
+  const [editMobile, setEditMobile] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editBankHolder, setEditBankHolder] = useState("");
+  const [editBankAccountNo, setEditBankAccountNo] = useState("");
+  const [editBankName, setEditBankName] = useState("");
+  const [editBankIfsc, setEditBankIfsc] = useState("");
 
   // System Process Flags (Toggles)
   const [grnSystemEnabled, setGrnSystemEnabled] = useState(false);
@@ -338,6 +350,21 @@ export default function Purchases() {
   const [filterBranch, setFilterBranch] = useState("all");
   const [filterOcr, setFilterOcr] = useState("all");
   const [filterTds, setFilterTds] = useState("all");
+
+  // Procurement segments custom categorization
+  const [segments, setSegments] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem("procurement_segments");
+      return cached ? JSON.parse(cached) : ["Steel", "Cables", "Fasteners", "Electricals", "Services", "Others"];
+    } catch {
+      return ["Steel", "Cables", "Fasteners", "Electricals", "Services", "Others"];
+    }
+  });
+  const [filterSegment, setFilterSegment] = useState("all");
+
+  useEffect(() => {
+    localStorage.setItem("procurement_segments", JSON.stringify(segments));
+  }, [segments]);
 
   // Extended Advanced Filters
   const [filterSeller, setFilterSeller] = useState("all");
@@ -771,9 +798,10 @@ export default function Purchases() {
             cgstAmount: String(ocrData.totals?.total_cgst ?? "0"),
             sgstAmount: String(ocrData.totals?.total_sgst ?? "0"),
             igstAmount: String(ocrData.totals?.total_igst ?? "0"),
-            status: confidence < 90 ? "needs_review" : "pending",
+            status: (confidence < 90 || ocrData.dispute_reason) ? "needs_review" : "pending",
             lineItems: ocrData.line_items || [],
             ocrConfidence: confidence,
+            disputeReason: ocrData.dispute_reason || null,
             rawData: {
               ...ocrData,
               fileBase64: uploadedBase64,
@@ -867,14 +895,18 @@ export default function Purchases() {
 
   // Stacked Advanced Filters Logic
   const filtered = invoices.filter((inv: any) => {
-    // 1. Text Search
+    // 1. Text Search (vendor, invoice #, location, AND item names in line items)
     const query = search.toLowerCase().trim();
     if (query) {
       const matchSearch = 
         (inv.invoiceNo || "").toLowerCase().includes(query) ||
         (inv.vendorName || "").toLowerCase().includes(query) ||
         (inv.vendorGstin || "").toLowerCase().includes(query) ||
-        (inv.branchLocation || "").toLowerCase().includes(query);
+        (inv.branchLocation || "").toLowerCase().includes(query) ||
+        (Array.isArray(inv.lineItems) && inv.lineItems.some((li: any) =>
+          (li.description || li.item || li.name || "").toLowerCase().includes(query) ||
+          (li.hsn || li.hsn_sac || "").toLowerCase().includes(query)
+        ));
       if (!matchSearch) return false;
     }
 
@@ -929,11 +961,19 @@ export default function Purchases() {
       if (!matchesItem) return false;
     }
 
+    // 12. Category Segment Filter
+    if (filterSegment !== "all" && (inv.category || "Steel") !== filterSegment) return false;
+
     return true;
   });
 
-  // Unique vendor list for dropdown
-  const uniqueSellers = Array.from(new Set(invoices.map((inv: any) => inv.vendorName).filter(Boolean)));
+  // Unique vendor list for dropdown (filtered by category segment)
+  const uniqueSellers = useMemo(() => {
+    const pool = filterSegment !== "all" 
+      ? invoices.filter((inv: any) => (inv.category || "Steel") === filterSegment)
+      : invoices;
+    return Array.from(new Set(pool.map((inv: any) => inv.vendorName).filter(Boolean)));
+  }, [invoices, filterSegment]);
 
   // KPI calculations
   const totalPurchasesYearly = invoices.reduce((sum, inv) => sum + parseFloat(inv.invoiceTotal || "0"), 0);
@@ -968,6 +1008,19 @@ export default function Purchases() {
     setEditInvoiceTotal(inv.invoiceTotal || "");
     setEditTaxableAmount(inv.taxableAmount || "");
     setEditTotalGst(inv.totalGst || "");
+    setEditCategory(inv.category || "Steel");
+
+    // Initialize extended vendor master & bank edit fields
+    const seller = inv.rawData?.seller || {};
+    setEditAddress(seller.address || "");
+    setEditMobile(seller.mobile || "");
+    setEditPhone(seller.phone || "");
+    setEditEmail(seller.email || "");
+    const bankD = seller.bank_details || {};
+    setEditBankHolder(bankD.account_holder || "");
+    setEditBankAccountNo(bankD.account_number || "");
+    setEditBankName(bankD.bank_name || "");
+    setEditBankIfsc(bankD.ifsc || "");
   };
 
   const handlePayNow = async (inv: any) => {
@@ -1096,11 +1149,22 @@ export default function Purchases() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
             <input
               className="search-input"
-              placeholder="Search vendor, invoice #, location..."
+              placeholder="Search vendor, invoice #, item name, HSN..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <AIVoiceAgent 
+            contextMode="global"
+            onAction={(action) => {
+              if (action.intent === "SEARCH_INVOICES" && action.searchQuery) {
+                setSearch(action.searchQuery);
+                toast.success(`AI Search Filter Applied: ${action.searchQuery}`);
+              } else if (action.message) {
+                toast.info(action.message);
+              }
+            }}
+          />
           <motion.button 
             whileTap={{ scale: 0.9 }} 
             onClick={() => setShowFilters(!showFilters)} 
@@ -1147,6 +1211,16 @@ export default function Purchases() {
                     <option value="all">OCR: ALL</option>
                     <option value="low">OCR: LOW</option>
                     <option value="high">OCR: HIGH</option>
+                  </select>
+                );
+              }
+              if (fId === "segment") {
+                return (
+                  <select key={fId} value={filterSegment} onChange={e => setFilterSegment(e.target.value)} className="bg-white text-[8px] font-black uppercase tracking-wider text-blue-ink rounded-full px-2 py-0.5 border border-blue-mid/10 focus:outline-none transition-all flex-1 min-w-0 shrink-0">
+                    <option value="all">CAT: ALL</option>
+                    {segments.map(seg => (
+                      <option key={seg} value={seg}>{seg.toUpperCase().slice(0, 8)}</option>
+                    ))}
                   </select>
                 );
               }
@@ -1249,6 +1323,14 @@ export default function Purchases() {
                     <option value="all">All Confidence Tiers</option>
                     <option value="low">Needs Review (&lt;90% Score)</option>
                     <option value="high">High Confidence (&gt;=90%)</option>
+                  </select>
+                ) },
+                { id: "segment", label: "Procurement Category", component: (
+                  <select value={filterSegment} onChange={e => setFilterSegment(e.target.value)} className="w-full bg-white border border-blue-mid/10 rounded-xl p-2 text-xs font-bold text-blue-ink">
+                    <option value="all">All Categories</option>
+                    {segments.map(seg => (
+                      <option key={seg} value={seg}>{seg}</option>
+                    ))}
                   </select>
                 ) },
                 { id: "tds", label: "194Q TDS Deduction", component: (
@@ -1615,6 +1697,24 @@ export default function Purchases() {
                         <span className="text-[8px] font-bold text-blue-mid/40 uppercase tracking-widest">
                           {inv.branchLocation}
                         </span>
+                        {(() => {
+                          const vGstin = inv.vendorGstin;
+                          const vName = inv.vendorName;
+                          const vTotal = invoices
+                            .filter((i2: any) => {
+                              if (vGstin && i2.vendorGstin) return i2.vendorGstin === vGstin;
+                              return i2.vendorName?.toLowerCase() === vName?.toLowerCase();
+                            })
+                            .reduce((s: number, i2: any) => s + parseFloat(i2.invoiceTotal || "0"), 0);
+                          if (vTotal > 4500000) {
+                            return (
+                              <span className="px-1.5 py-0.5 rounded bg-red-500 text-white text-[7px] font-black uppercase tracking-wider animate-pulse">
+                                ⚠️ &gt;45L
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
 
@@ -1635,6 +1735,8 @@ export default function Purchases() {
               </div>
             );
           })}
+
+
         </AnimatePresence>
       </div>
 
@@ -1645,15 +1747,98 @@ export default function Purchases() {
             <div className="p-6 space-y-5 overflow-y-auto no-scrollbar pb-10">
               <DrawerHeader className="p-0 text-left">
                 <div className="flex justify-between items-start mb-4">
-                  <button 
-                    onClick={() => {
-                      setShowDocPreview(true);
-                    }}
-                    className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10 shadow-sm hover:bg-blue-light hover:text-blue-ink hover:scale-105 active:scale-95 transition-all focus:outline-none animate-pulse-glow"
-                    title="View Original Scanned Document"
-                  >
-                    <Eye size={24} />
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setShowDocPreview(true);
+                      }}
+                      className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10 shadow-sm hover:bg-blue-light hover:text-blue-ink hover:scale-105 active:scale-95 transition-all focus:outline-none animate-pulse-glow"
+                      title="View Original Scanned Document"
+                    >
+                      <Eye size={24} />
+                    </button>
+                    <AIVoiceAgent 
+                      contextMode="invoice"
+                      invoiceData={selectedInvoice}
+                      className="h-12 w-12 rounded-2xl"
+                      onAction={(action) => {
+                        if (action.intent === "EDIT_INVOICE" && action.edits) {
+                          const { lineItemIndex, rate, quantity } = action.edits;
+                          const msg = action.message || `AI wants to update line item ${lineItemIndex + 1}. Rate: ${rate}, Quantity: ${quantity}. Confirm to recalculate?`;
+                          if (window.confirm(msg)) {
+                            const currentItems = Array.isArray(selectedInvoice.lineItems) ? [...selectedInvoice.lineItems] : [];
+                            if (currentItems[lineItemIndex]) {
+                              const item = { ...currentItems[lineItemIndex] };
+                              const newRate = rate !== null ? rate : parseFloat(item.price_per_unit || item.pricePerUnit || item.rate || "0");
+                              const newQty = quantity !== null ? quantity : parseFloat(item.quantity || item.qty || "0");
+                              const newTotal = newRate * newQty;
+                              
+                              item.price_per_unit = String(newRate);
+                              item.pricePerUnit = String(newRate);
+                              item.quantity = String(newQty);
+                              item.qty = String(newQty);
+                              item.taxable_amount = String(newTotal);
+                              item.taxableAmount = String(newTotal);
+                              
+                              // Recalculate taxes
+                              item.cgst_amount = String((parseFloat(item.cgst_rate || item.cgstRate || "0") / 100) * newTotal);
+                              item.cgstAmount = item.cgst_amount;
+                              item.sgst_amount = String((parseFloat(item.sgst_rate || item.sgstRate || "0") / 100) * newTotal);
+                              item.sgstAmount = item.sgst_amount;
+                              item.igst_amount = String((parseFloat(item.igst_rate || item.igstRate || "0") / 100) * newTotal);
+                              item.igstAmount = item.igst_amount;
+                              item.total_amount = String(newTotal + parseFloat(item.cgst_amount) + parseFloat(item.sgst_amount) + parseFloat(item.igst_amount));
+                              item.total = item.total_amount;
+                              item.totalAmount = item.total_amount;
+                              
+                              currentItems[lineItemIndex] = item;
+                              
+                              // Recalculate Grand Totals
+                              const newTaxable = currentItems.reduce((acc, curr) => acc + parseFloat(curr.taxableAmount || curr.taxable_amount || "0"), 0);
+                              const newCgst = currentItems.reduce((acc, curr) => acc + parseFloat(curr.cgstAmount || curr.cgst_amount || "0"), 0);
+                              const newSgst = currentItems.reduce((acc, curr) => acc + parseFloat(curr.sgstAmount || curr.sgst_amount || "0"), 0);
+                              const newIgst = currentItems.reduce((acc, curr) => acc + parseFloat(curr.igstAmount || curr.igst_amount || "0"), 0);
+                              const newTotalGst = newCgst + newSgst + newIgst;
+                              const newInvoiceTotal = newTaxable + newTotalGst;
+                              
+                              // Check mismatch with amount in words
+                              const amountInWords = selectedInvoice.rawData?.totals?.amount_in_words || selectedInvoice.amountInWords || "";
+                              let newStatus = selectedInvoice.status;
+                              let newDisputeReason = selectedInvoice.disputeReason;
+                              
+                              // We just flag it if there's any edit as a safeguard (or check strictly if we had parsing for words)
+                              if (Math.abs(parseFloat(selectedInvoice.invoiceTotal || "0") - newInvoiceTotal) > 1) {
+                                 newStatus = "needs_review";
+                                 newDisputeReason = `Amount verification mismatch due to AI voice edit. Old Total: ${selectedInvoice.invoiceTotal}, New Calculated Total: ${newInvoiceTotal}. Pls verify with amount in words: ${amountInWords}`;
+                              }
+
+                              updateMutation.mutate({
+                                id: selectedInvoice.id,
+                                lineItems: currentItems,
+                                taxableAmount: String(newTaxable),
+                                totalGst: String(newTotalGst),
+                                cgstAmount: String(newCgst),
+                                sgstAmount: String(newSgst),
+                                igstAmount: String(newIgst),
+                                invoiceTotal: String(newInvoiceTotal),
+                                status: newStatus,
+                                disputeReason: newDisputeReason
+                              }, {
+                                onSuccess: (updatedData) => {
+                                  toast.success("AI Voice edits calculated and saved successfully!");
+                                  setSelectedInvoice(updatedData);
+                                }
+                              });
+                            } else {
+                              toast.error(`Line item at index ${lineItemIndex + 1} not found.`);
+                            }
+                          }
+                        } else if (action.message) {
+                          toast.info(action.message);
+                        }
+                      }}
+                    />
+                  </div>
                   <div className="flex gap-2 items-center">
                     {selectedInvoice.status !== "processed" && (
                       <button
@@ -1669,6 +1854,25 @@ export default function Purchases() {
                               invoiceTotal: editInvoiceTotal,
                               taxableAmount: editTaxableAmount,
                               totalGst: editTotalGst,
+                              category: editCategory,
+                              rawData: {
+                                ...selectedInvoice.rawData,
+                                seller: {
+                                  ...(selectedInvoice.rawData?.seller || {}),
+                                  name: editVendorName,
+                                  gstin: editVendorGstin,
+                                  address: editAddress,
+                                  mobile: editMobile,
+                                  phone: editPhone,
+                                  email: editEmail,
+                                  bank_details: {
+                                    account_holder: editBankHolder,
+                                    account_number: editBankAccountNo,
+                                    bank_name: editBankName,
+                                    ifsc: editBankIfsc,
+                                  }
+                                }
+                              }
                             }, {
                               onSuccess: (updatedData) => {
                                 toast.success("Invoice details saved successfully ✓");
@@ -1773,6 +1977,40 @@ export default function Purchases() {
               )}
 
               {/* SECTION: VENDOR & INVOICE STRUCTURAL HEADERS */}
+
+              {/* 45 LAKH TDS/194Q COMPLIANCE WARNING */}
+              {(() => {
+                const vendorGstin = selectedInvoice.vendorGstin;
+                const vendorName = selectedInvoice.vendorName;
+                const currentFy = selectedInvoice.financialYear || "2026-2027";
+                const vendorTotal = invoices
+                  .filter((inv: any) => {
+                    const matchGstin = vendorGstin && inv.vendorGstin && inv.vendorGstin === vendorGstin;
+                    const matchName = !vendorGstin && inv.vendorName && inv.vendorName.toLowerCase() === vendorName?.toLowerCase();
+                    return (matchGstin || matchName) && (inv.financialYear === currentFy || !inv.financialYear);
+                  })
+                  .reduce((sum: number, inv: any) => sum + parseFloat(inv.invoiceTotal || "0"), 0);
+                
+                if (vendorTotal > 4500000) {
+                  const lakhs = (vendorTotal / 100000).toFixed(2);
+                  return (
+                    <div className="rounded-2xl border-2 border-red-400 bg-gradient-to-r from-red-50 via-orange-50 to-yellow-50 p-4 flex items-start gap-3 shadow-sm animate-pulse-glow">
+                      <div className="h-10 w-10 rounded-xl bg-red-500 flex items-center justify-center text-white flex-shrink-0 shadow-md">
+                        <AlertTriangle size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-black text-red-700 uppercase tracking-wider">⚠️ TDS/194Q Compliance Warning</p>
+                        <p className="text-[10px] text-red-600 font-bold mt-1">
+                          Vendor purchases for FY {currentFy} exceed <span className="font-black">₹45 Lakhs</span> (Current Total: <span className="font-black text-red-800">₹{lakhs}L</span>). 
+                          Ensure <span className="font-black">0.1% TDS under Section 194Q</span> is deducted on all future payments to this vendor.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="grid grid-cols-2 gap-4">
                 {/* CARD 1: VENDOR MASTER INFO */}
                 <div className="card p-4 space-y-2.5">
@@ -1784,22 +2022,21 @@ export default function Purchases() {
                     const email = currentVendor?.email || seller.email || "";
                     const address = selectedInvoice.rawData?.seller?.address || currentVendor?.address || "—";
 
-                    // Prefer mobile as contact 1; fallback to landline if not present.
-                    const contact1Label = mobile ? "Mobile" : "Landline";
-                    const contact1Val = mobile || landline || "—";
-
-                    // Show secondary contact detail (either landline if mobile was first, or email).
-                    const contact2Label = (mobile && landline) ? "Landline" : "Email";
-                    const contact2Val = (mobile && landline) ? landline : (email || "—");
+                    // Deduplicate Phone and Mobile if they match
+                    let phoneStr = seller.phone || landline || "";
+                    if (mobile && phoneStr && mobile.replace(/[^a-zA-Z0-9]/g, "") === phoneStr.replace(/[^a-zA-Z0-9]/g, "")) {
+                      phoneStr = "";
+                    }
 
                     const fields = [
                       { label: "Legal Name", val: selectedInvoice.vendorName, isEditable: true, editValue: editVendorName, setEditValue: setEditVendorName },
                       { label: "GSTIN", val: selectedInvoice.vendorGstin || "Not Provided", highlight: true, isEditable: true, editValue: editVendorGstin, setEditValue: setEditVendorGstin },
                       { label: "PAN", val: selectedInvoice.vendorGstin ? selectedInvoice.vendorGstin.slice(2, 12) : "—" },
                       { label: "State Code", val: selectedInvoice.vendorGstin ? `${selectedInvoice.vendorGstin.slice(0, 2)} (${getStateNameFromCode(selectedInvoice.vendorGstin)})` : "—" },
-                      { label: "Address", val: address },
-                      { label: contact1Label, val: contact1Val },
-                      { label: contact2Label, val: contact2Val }
+                      { label: "Address", val: address || "—", isEditable: true, editValue: editAddress, setEditValue: setEditAddress },
+                      { label: "Mobile", val: mobile || "—", isEditable: true, editValue: editMobile, setEditValue: setEditMobile },
+                      { label: "Phone", val: phoneStr || "—", isEditable: true, editValue: editPhone, setEditValue: setEditPhone },
+                      { label: "Email", val: email || "—", isEditable: true, editValue: editEmail, setEditValue: setEditEmail },
                     ];
 
                     return fields.map((fld) => (
@@ -1839,6 +2076,28 @@ export default function Purchases() {
                         >
                           {(() => {
                             const ocrBank = selectedInvoice.rawData?.seller?.bank_details;
+                            if (isEditing) {
+                              return (
+                                <div className="space-y-1.5">
+                                  <div>
+                                    <span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Holder Name</span>
+                                    <input type="text" value={editBankHolder} onChange={e => setEditBankHolder(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none" />
+                                  </div>
+                                  <div>
+                                    <span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Account Number</span>
+                                    <input type="text" value={editBankAccountNo} onChange={e => setEditBankAccountNo(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none tracking-widest" />
+                                  </div>
+                                  <div>
+                                    <span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Bank Name</span>
+                                    <input type="text" value={editBankName} onChange={e => setEditBankName(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none" />
+                                  </div>
+                                  <div>
+                                    <span className="text-blue-mid/50 font-bold uppercase block text-[8px]">IFSC Code</span>
+                                    <input type="text" value={editBankIfsc} onChange={e => setEditBankIfsc(e.target.value)} className="bg-white border border-blue-mid/10 rounded-lg px-2 py-0.5 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none tracking-widest" />
+                                  </div>
+                                </div>
+                              );
+                            }
                             if (ocrBank) {
                               return (
                                 <div className="space-y-1.5">
@@ -1848,7 +2107,7 @@ export default function Purchases() {
                                   </div>
                                   <div>
                                     <span className="text-blue-mid/50 font-bold uppercase block text-[8px]">Account Number</span>
-                                    <span className="font-black text-blue-ink tracking-widest">••••••••{ocrBank.account_number.slice(-4)}</span>
+                                    <span className="font-black text-blue-ink tracking-widest">••••••••{ocrBank.account_number?.slice(-4)}</span>
                                   </div>
                                   <div>
                                     <span className="text-blue-mid/50 font-bold uppercase block text-[8px]">IFSC & Bank</span>
@@ -1904,6 +2163,7 @@ export default function Purchases() {
                         updateMutation.mutate({
                           id: selectedInvoice.id,
                           dueDate: updatedDueDate,
+                          category: editCategory,
                           rawData: {
                             ...selectedInvoice.rawData,
                             paymentTerms: localPaymentTerms,
@@ -1981,6 +2241,76 @@ export default function Purchases() {
                       onChange={e => setLocalVehicleNumber(e.target.value)}
                       className="bg-white border border-blue-mid/10 rounded-lg px-2 py-1 w-full text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none"
                     />
+                  </div>
+
+                  <div className="text-[10px]">
+                    <label className="text-blue-mid/60 uppercase font-black tracking-wider block mb-1">Purchase Segment / Category</label>
+                    <div className="flex gap-1.5 items-center">
+                      <select 
+                        value={editCategory}
+                        onChange={e => {
+                          setEditCategory(e.target.value);
+                          updateMutation.mutate({
+                            id: selectedInvoice.id,
+                            category: e.target.value
+                          });
+                        }}
+                        className="bg-white border border-blue-mid/10 rounded-lg px-2 py-1 flex-1 text-xs font-bold text-blue-ink focus:border-blue-mid focus:outline-none h-7"
+                      >
+                        {segments.map(seg => (
+                          <option key={seg} value={seg}>{seg}</option>
+                        ))}
+                      </select>
+                      
+                      <button
+                        onClick={() => {
+                          const newSeg = prompt("Enter new purchase segment / category name:");
+                          if (newSeg && newSeg.trim()) {
+                            const trimmed = newSeg.trim();
+                            if (segments.includes(trimmed)) {
+                              toast.error("Category already exists!");
+                              return;
+                            }
+                            const updatedSegments = [...segments, trimmed];
+                            setSegments(updatedSegments);
+                            setEditCategory(trimmed);
+                            updateMutation.mutate({
+                              id: selectedInvoice.id,
+                              category: trimmed
+                            });
+                            toast.success(`Category "${trimmed}" added ✓`);
+                          }
+                        }}
+                        className="h-7 w-7 rounded-lg bg-blue-mid/10 hover:bg-blue-mid/20 text-blue-mid flex items-center justify-center border border-blue-mid/15 transition-all text-xs font-black active:scale-95 cursor-pointer"
+                        title="Add Category"
+                      >
+                        +
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (segments.length <= 1) {
+                            toast.error("Cannot delete the last remaining category.");
+                            return;
+                          }
+                          if (confirm(`Are you sure you want to delete category "${editCategory}"? All invoices in this category will default to "Steel".`)) {
+                            const updatedSegments = segments.filter(s => s !== editCategory);
+                            setSegments(updatedSegments);
+                            const nextCategory = updatedSegments[0] || "Steel";
+                            setEditCategory(nextCategory);
+                            updateMutation.mutate({
+                              id: selectedInvoice.id,
+                              category: nextCategory
+                            });
+                            toast.success(`Category "${editCategory}" removed ✓`);
+                          }
+                        }}
+                        className="h-7 w-7 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 flex items-center justify-center border border-red-500/15 transition-all text-xs font-black active:scale-95 cursor-pointer"
+                        title="Remove Category"
+                      >
+                        -
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

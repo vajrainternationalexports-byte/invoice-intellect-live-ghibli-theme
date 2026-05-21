@@ -110,9 +110,11 @@ export function DocumentExtractor({
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await processFile(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    for (const file of files) {
+      await processFile(file);
+    }
   };
 
   return (
@@ -174,6 +176,7 @@ export function DocumentExtractor({
             ref={fileInputRef} 
             className="hidden" 
             accept="application/pdf, image/*"
+            multiple
             onChange={handleFileUpload}
           />
         </div>

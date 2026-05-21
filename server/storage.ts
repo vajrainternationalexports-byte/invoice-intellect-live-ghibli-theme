@@ -192,6 +192,7 @@ export class MemStorage implements IStorage {
       tdsDeducted: "0.00",
       tcsCollected: "0.00",
       disputeReason: null,
+      category: "Steel",
       rawData: null,
       createdAt: new Date()
     });
@@ -231,6 +232,7 @@ export class MemStorage implements IStorage {
       tdsDeducted: "105.93", // 0.1% TDS on 105932.20 under 194Q
       tcsCollected: "0.00",
       disputeReason: null,
+      category: "Services",
       rawData: null,
       createdAt: new Date()
     });

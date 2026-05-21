@@ -14,7 +14,7 @@ def extract_pdf_text(pdf_path):
     # Find all streams
     # Streams are between b'stream' and b'endstream'
     # We also look for /Filter /FlateDecode in the stream's dictionary
-    stream_pattern = re.compile(b'(\d+)\s+(\d+)\s+obj\s*(<<.*?>>)\s*stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
+    stream_pattern = re.compile(b'(\\d+)\\s+(\\d+)\\s+obj\\s*(<<.*?>>)\\s*stream\\r?\\n(.*?)\\r?\\nendstream', re.DOTALL)
     
     extracted_text = []
     
@@ -29,7 +29,7 @@ def extract_pdf_text(pdf_path):
                 decompressed = zlib.decompress(stream_data)
                 # Text in PDF streams is typically in TJ/Tj operators, inside parentheses: e.g., (text) Tj
                 # Let's extract everything inside parentheses
-                text_matches = re.findall(b'\((.*?)\)', decompressed)
+                text_matches = re.findall(b'\\((.*?)\\)', decompressed)
                 for tm in text_matches:
                     try:
                         decoded = tm.decode('utf-8', errors='ignore')
@@ -44,13 +44,27 @@ def extract_pdf_text(pdf_path):
                 # Try decompressing with negative wbits for raw deflate
                 try:
                     decompressed = zlib.decompress(stream_data, -zlib.MAX_WBITS)
-                    text_matches = re.findall(b'\((.*?)\)', decompressed)
+                    text_matches = re.findall(b'\\((.*?)\\)', decompressed)
                     for tm in text_matches:
                         decoded = tm.decode('utf-8', errors='ignore')
                         if len(decoded.strip()) > 1:
                             extracted_text.append(decoded.strip())
                 except Exception:
                     pass
+        else:
+            # Support for uncompressed raw PDF streams
+            try:
+                text_matches = re.findall(b'\\((.*?)\\)', stream_data)
+                for tm in text_matches:
+                    try:
+                        decoded = tm.decode('utf-8', errors='ignore')
+                        decoded = decoded.replace('\\(', '(').replace('\\)', ')')
+                        if len(decoded.strip()) > 1:
+                            extracted_text.append(decoded.strip())
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
     return " ".join(extracted_text)
 
@@ -61,3 +75,4 @@ if __name__ == '__main__':
         text = extract_pdf_text(sys.argv[1])
         print(f"--- EXTRACTED TEXT FROM {os.path.basename(sys.argv[1])} ---")
         print(text[:3000]) # print first 3000 chars
+
