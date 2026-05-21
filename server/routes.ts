@@ -247,9 +247,25 @@ async function resolveOrCreateVendor(
 function normalizeLineItems(lineItems: any[] | null | undefined): any[] {
   if (!lineItems || !Array.isArray(lineItems)) return [];
   return lineItems.map((li, idx) => {
-    const qty = Number(li.quantity ?? li.qty ?? 0);
-    const rate = Number(li.price_per_unit ?? li.unit_price ?? li.rate ?? 0);
-    const taxableValue = Number(li.taxable_amount ?? li.taxableValue ?? (qty * rate));
+    let qty = Number(li.quantity ?? li.qty ?? 0);
+    let rate = Number(li.price_per_unit ?? li.unit_price ?? li.rate ?? 0);
+    const discount = Number(li.discount ?? 0);
+    let taxableValue = Number(li.taxable_amount ?? li.taxableValue ?? 0);
+    
+    // Back-calculate missing/zero values using logical reasoning:
+    if (qty === 0 && rate > 0 && taxableValue > 0) {
+      const discountMultiplier = 1 - discount / 100;
+      if (discountMultiplier > 0) {
+        qty = taxableValue / (rate * discountMultiplier);
+      }
+    } else if (rate === 0 && qty > 0 && taxableValue > 0) {
+      const discountMultiplier = 1 - discount / 100;
+      if (discountMultiplier > 0) {
+        rate = taxableValue / (qty * discountMultiplier);
+      }
+    } else if (taxableValue === 0 && qty > 0 && rate > 0) {
+      taxableValue = qty * rate * (1 - discount / 100);
+    }
     
     // CGST/SGST/IGST rates and amounts
     const cgstRate = Number(li.cgst_rate ?? li.cgstRate ?? 0);
@@ -269,7 +285,7 @@ function normalizeLineItems(lineItems: any[] | null | undefined): any[] {
       unit: String(li.unit ?? li.uom ?? "Pcs"),
       hsn: String(li.hsn_sac ?? li.hsn_code ?? li.hsn ?? "7308"),
       rate: String(rate.toFixed(2)),
-      discount: Number(li.discount ?? 0),
+      discount: discount,
       taxableValue: String(taxableValue.toFixed(2)),
       cgstRate: cgstRate,
       cgstAmount: String(cgstAmount.toFixed(2)),
@@ -548,15 +564,30 @@ function processAndValidateOcrResult(data: any): any {
           item.hsn_sac = item.hsn_sac.replace(/O/g, "0").replace(/I/g, "1").replace(/B/g, "8").replace(/S/g, "5").replace(/Z/g, "2");
         }
         
-        let qty = Number(item.quantity ?? 0);
-        let rate = Number(item.price_per_unit ?? 0);
+        let qty = Number(item.quantity ?? item.qty ?? 0);
+        let rate = Number(item.price_per_unit ?? item.unit_price ?? item.rate ?? 0);
         let discount = Number(item.discount ?? 0);
-        let taxable = Number(item.taxable_amount ?? 0);
+        let taxable = Number(item.taxable_amount ?? item.taxableValue ?? 0);
         
-        const calculatedTaxable = qty * rate * (1 - discount / 100);
-        if (taxable === 0 || Math.abs(taxable - calculatedTaxable) > 1.0) {
-          if (qty > 0 && rate > 0) {
-            taxable = calculatedTaxable;
+        // Back-calculate missing/zero values using logical reasoning:
+        if (qty === 0 && rate > 0 && taxable > 0) {
+          const discountMultiplier = 1 - discount / 100;
+          if (discountMultiplier > 0) {
+            qty = taxable / (rate * discountMultiplier);
+          }
+        } else if (rate === 0 && qty > 0 && taxable > 0) {
+          const discountMultiplier = 1 - discount / 100;
+          if (discountMultiplier > 0) {
+            rate = taxable / (qty * discountMultiplier);
+          }
+        } else if (taxable === 0 && qty > 0 && rate > 0) {
+          taxable = qty * rate * (1 - discount / 100);
+        } else {
+          const calculatedTaxable = qty * rate * (1 - discount / 100);
+          if (taxable === 0 || Math.abs(taxable - calculatedTaxable) > 1.0) {
+            if (qty > 0 && rate > 0) {
+              taxable = calculatedTaxable;
+            }
           }
         }
         
@@ -714,6 +745,160 @@ function processAndValidateOcrResult(data: any): any {
   }
   
   return data;
+}
+
+function getFinancialYear(dateStr: string | null | undefined): string {
+  if (!dateStr) return "2026-2027";
+  const trimmed = dateStr.trim();
+  const dmyMatch = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  let parsedDate: Date;
+  if (dmyMatch) {
+    let day = parseInt(dmyMatch[1], 10);
+    let month = parseInt(dmyMatch[2], 10) - 1; // 0-indexed month
+    let year = parseInt(dmyMatch[3], 10);
+    if (year < 100) year += 2000;
+    parsedDate = new Date(year, month, day);
+  } else {
+    parsedDate = new Date(trimmed);
+  }
+  
+  if (isNaN(parsedDate.getTime())) return "2026-2027";
+  const year = parsedDate.getFullYear();
+  const month = parsedDate.getMonth(); // 0-indexed (3 is April)
+  if (month >= 3) { // April onwards
+    return `${year}-${year + 1}`;
+  } else {
+    return `${year - 1}-${year}`;
+  }
+}
+
+async function applyInvoiceValidationRules(updates: any, originalInvoice?: any): Promise<any> {
+  // Merge original fields and updates to run validation checks on the complete state.
+  const merged = { ...originalInvoice, ...updates };
+  const invoiceIdToExclude = originalInvoice?.id;
+  
+  // Set default status/dispute reasons based on incoming values
+  let status = updates.status !== undefined ? updates.status : (originalInvoice?.status || "approved");
+  let disputeReasons: string[] = [];
+
+  // 1. Validate GSTIN Format if present
+  if (merged.vendorGstin) {
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstinRegex.test(merged.vendorGstin)) {
+      status = "needs_review";
+      disputeReasons.push("Invalid GSTIN format detected");
+    }
+  }
+
+  // 2. State-code based supply type auto-detection (IES is West Bengal: code 19)
+  if (merged.vendorGstin) {
+    const stateCode = merged.vendorGstin.slice(0, 2);
+    if (stateCode === "19") {
+      updates.supplyType = "Intrastate";
+      const totalGst = parseFloat(String(merged.totalGst || "0"));
+      if (totalGst > 0 && parseFloat(String(merged.igstAmount || "0")) > 0) {
+        status = "needs_review";
+        disputeReasons.push("Tax conflict: Interstate tax (IGST) coexisting with Intrastate supply");
+      }
+      // If CGST/SGST are zero but total GST is > 0, split it
+      if (parseFloat(String(merged.cgstAmount || "0")) === 0 && parseFloat(String(merged.sgstAmount || "0")) === 0) {
+        updates.cgstAmount = String((totalGst / 2).toFixed(2));
+        updates.sgstAmount = String((totalGst / 2).toFixed(2));
+        updates.igstAmount = "0.00";
+      }
+    } else {
+      updates.supplyType = "Interstate";
+      const totalGst = parseFloat(String(merged.totalGst || "0"));
+      if (totalGst > 0 && (parseFloat(String(merged.cgstAmount || "0")) > 0 || parseFloat(String(merged.sgstAmount || "0")) > 0)) {
+        status = "needs_review";
+        disputeReasons.push("Tax conflict: Intrastate taxes (CGST/SGST) coexisting with Interstate supply");
+      }
+      if (parseFloat(String(merged.igstAmount || "0")) === 0) {
+        updates.igstAmount = String(totalGst.toFixed(2));
+        updates.cgstAmount = "0.00";
+        updates.sgstAmount = "0.00";
+      }
+    }
+  }
+
+  // 3. Duplicate Invoice Detection
+  const allInvoices = await storage.listPurchaseInvoices();
+  const isDuplicate = allInvoices.some((inv: any) => 
+    inv.id !== invoiceIdToExclude &&
+    inv.invoiceNo.toLowerCase().trim() === (merged.invoiceNo || "").toLowerCase().trim() &&
+    inv.vendorName?.toLowerCase().trim() === (merged.vendorName || "").toLowerCase().trim()
+  );
+  if (isDuplicate) {
+    status = "needs_review";
+    disputeReasons.push("Potential duplicate invoice detected (matching number and vendor name)");
+  }
+
+  // 4. TDS Section 194Q & 45 Lakhs Threshold check
+  if (merged.vendorId) {
+    const currentFy = merged.financialYear || getFinancialYear(merged.invoiceDate);
+    updates.financialYear = currentFy;
+    const vendorInvoices = allInvoices.filter((inv: any) => 
+      inv.id !== invoiceIdToExclude &&
+      inv.vendorId === merged.vendorId && 
+      (inv.financialYear === currentFy || !inv.financialYear)
+    );
+    const ytdTotal = vendorInvoices.reduce((sum: number, inv: any) => sum + parseFloat(String(inv.invoiceTotal || "0")), 0);
+    const currentTotal = parseFloat(String(merged.invoiceTotal || "0"));
+    const totalPurchases = ytdTotal + currentTotal;
+
+    // Flag 45 Lakh threshold
+    if (totalPurchases > 4500000) {
+      status = "needs_review";
+      disputeReasons.push(`Vendor total annual purchase (₹${(totalPurchases / 100000).toFixed(2)} Lakhs) exceeds the ₹45 Lakhs threshold`);
+    }
+
+    const threshold = 5000000; // ₹50 Lakhs
+    if (totalPurchases > threshold) {
+      updates.tcsApplicable = true;
+      const currentTaxable = parseFloat(String(merged.taxableAmount || "0"));
+      const rate = 0.001; // 0.1%
+      const calculatedTds = currentTaxable * rate;
+      updates.tdsDeducted = String(calculatedTds.toFixed(2));
+    } else {
+      updates.tcsApplicable = false;
+      updates.tdsDeducted = "0.00";
+    }
+  }
+
+  // 5. OCR Confidence Gating
+  const confidence = merged.ocrConfidence ?? 100;
+  if (confidence < 90) {
+    status = "needs_review";
+    disputeReasons.push(`OCR confidence score low (${confidence}%)`);
+  }
+
+  // 6. Cross-verify numeric invoice total with Amount in Words
+  if (merged.amountInWords) {
+    const parsedWordsTotal = parseWordsToNumber(merged.amountInWords);
+    if (parsedWordsTotal !== null) {
+      const roundedTotal = Math.round(parseFloat(String(merged.invoiceTotal || "0")));
+      const diff = Math.abs(roundedTotal - parsedWordsTotal);
+      if (diff > 2.0) {
+        status = "needs_review";
+        disputeReasons.push(`Amount verification mismatch: Numeric total is ₹${roundedTotal} but Words total is ₹${parsedWordsTotal.toFixed(2)}`);
+      }
+    }
+  }
+
+  // 7. Default net 30 payment terms due-date math
+  if (merged.invoiceDate && !merged.dueDate) {
+    const d = new Date(merged.invoiceDate);
+    d.setDate(d.getDate() + 30);
+    updates.dueDate = d.toISOString().split("T")[0];
+  }
+
+  // If status is explicitly set by client (e.g. to "approved"), keep it. Otherwise, set to computed status.
+  if (updates.status === undefined) {
+    updates.status = status;
+  }
+  
+  updates.disputeReason = disputeReasons.length > 0 ? disputeReasons.join(" | ") : null;
+  return updates;
 }
 
 async function tryExtractWithClaude(
@@ -1302,113 +1487,20 @@ Note: lineItemIndex should be the 0-based array index of the item they want to e
         }
       }
       
-      // 1. Validate GSTIN Format if present
-      if (body.vendorGstin) {
-        const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-        if (!gstinRegex.test(body.vendorGstin)) {
-          body.status = "needs_review";
-          body.disputeReason = "Invalid GSTIN format detected";
-        }
-      }
+      // Apply centralized validation rules
+      const validatedBody = await applyInvoiceValidationRules(body);
 
-      // 2. State-code based supply type auto-detection (IES is West Bengal: code 19)
-      if (body.vendorGstin) {
-        const stateCode = body.vendorGstin.slice(0, 2);
-        if (stateCode === "19") {
-          body.supplyType = "Intrastate";
-          // Calculate CGST / SGST split
-          const totalGst = parseFloat(body.totalGst || "0");
-          if (totalGst > 0 && parseFloat(body.igstAmount || "0") > 0) {
-            body.status = "needs_review";
-            body.disputeReason = "Tax conflict: Interstate tax (IGST) coexisting with Intrastate supply";
-          }
-          if (parseFloat(body.cgstAmount || "0") === 0 && parseFloat(body.sgstAmount || "0") === 0) {
-            body.cgstAmount = String((totalGst / 2).toFixed(2));
-            body.sgstAmount = String((totalGst / 2).toFixed(2));
-            body.igstAmount = "0.00";
-          }
-        } else {
-          body.supplyType = "Interstate";
-          const totalGst = parseFloat(body.totalGst || "0");
-          if (totalGst > 0 && (parseFloat(body.cgstAmount || "0") > 0 || parseFloat(body.sgstAmount || "0") > 0)) {
-            body.status = "needs_review";
-            body.disputeReason = "Tax conflict: Intrastate taxes (CGST/SGST) coexisting with Interstate supply";
-          }
-          if (parseFloat(body.igstAmount || "0") === 0) {
-            body.igstAmount = String(totalGst.toFixed(2));
-            body.cgstAmount = "0.00";
-            body.sgstAmount = "0.00";
-          }
-        }
-      }
-
-      // 3. Duplicate Invoice Detection
-      const allInvoices = await storage.listPurchaseInvoices();
-      const isDuplicate = allInvoices.some((inv: any) => 
-        inv.invoiceNo.toLowerCase().trim() === (body.invoiceNo || "").toLowerCase().trim() &&
-        inv.vendorName?.toLowerCase().trim() === (body.vendorName || "").toLowerCase().trim()
-      );
-      if (isDuplicate) {
-        body.status = "needs_review";
-        body.disputeReason = "Potential duplicate invoice detected (matching number and vendor name)";
-      }
-
-      // 4. TDS Section 194Q & 45 Lakhs Threshold check
-      if (body.vendorId) {
-        const currentFy = body.financialYear || "2026-2027";
-        const vendorInvoices = allInvoices.filter((inv: any) => 
-          inv.vendorId === body.vendorId && 
-          (inv.financialYear === currentFy || !inv.financialYear)
-        );
-        const ytdTotal = vendorInvoices.reduce((sum: number, inv: any) => sum + parseFloat(inv.invoiceTotal || "0"), 0);
-        const currentTotal = parseFloat(body.invoiceTotal || "0");
-        const totalPurchases = ytdTotal + currentTotal;
-
-        // Flag 45 Lakh threshold
-        if (totalPurchases > 4500000) {
-          body.status = "needs_review";
-          const warningMsg = `Vendor total annual purchase (₹${(totalPurchases / 100000).toFixed(2)} Lakhs) exceeds the ₹45 Lakhs threshold`;
-          body.disputeReason = body.disputeReason ? `${body.disputeReason} | ${warningMsg}` : warningMsg;
-        }
-
-        const threshold = 5000000; // ₹50 Lakhs
-        if (totalPurchases > threshold) {
-          body.tcsApplicable = true;
-          // Calculate taxable portion exceeding 50L limit
-          const taxableExceeding = Math.max(0, totalPurchases - threshold);
-          const currentTaxable = parseFloat(body.taxableAmount || "0");
-          
-          // Deduct 0.1% TDS on the applicable current amount
-          const rate = 0.001; // 0.1%
-          const calculatedTds = currentTaxable * rate;
-          body.tdsDeducted = String(calculatedTds.toFixed(2));
-        }
-      }
-
-      // 5. OCR Confidence Gating
-      const confidence = body.ocrConfidence ?? 100;
-      if (confidence < 90) {
-        body.status = "needs_review";
-        body.disputeReason = (body.disputeReason ? body.disputeReason + " | " : "") + `OCR confidence score low (${confidence}%)`;
-      }
-
-      // 6. Default net 30 payment terms due-date math
-      if (body.invoiceDate && !body.dueDate) {
-        const d = new Date(body.invoiceDate);
-        d.setDate(d.getDate() + 30);
-        body.dueDate = d.toISOString().split("T")[0];
-      }
-
-      const parsed = insertPurchaseInvoiceSchema.safeParse(body);
+      const parsed = insertPurchaseInvoiceSchema.safeParse(validatedBody);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
       
       const created = await storage.createPurchaseInvoice(parsed.data);
 
+      const confidence = validatedBody.ocrConfidence ?? 100;
       // Audit and Logs
       await storage.createOcrLog({
-        filename: body.filename || `${body.invoiceNo}.pdf`,
+        filename: validatedBody.filename || `${validatedBody.invoiceNo}.pdf`,
         docType: "TAX_INVOICE",
-        rawText: body.rawText || `Extracted invoice ${body.invoiceNo}`,
+        rawText: validatedBody.rawText || `Extracted invoice ${validatedBody.invoiceNo}`,
         extractedJson: created,
         confidenceScore: confidence,
         verificationStatus: created.status === "needs_review" ? "manual_corrected" : "auto_approved"
@@ -1462,7 +1554,10 @@ Note: lineItemIndex should be the 0-based array index of the item they want to e
       }
     }
 
-    const inv = await storage.updatePurchaseInvoice(req.params.id, updates);
+    // Apply centralized validation rules on updates, using original as reference
+    const validatedUpdates = await applyInvoiceValidationRules(updates, original);
+
+    const inv = await storage.updatePurchaseInvoice(req.params.id, validatedUpdates);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
 
     // Sync vendor master profile from rawData edits

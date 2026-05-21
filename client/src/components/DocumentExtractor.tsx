@@ -112,9 +112,9 @@ export function DocumentExtractor({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    for (const file of files) {
-      await processFile(file);
-    }
+    
+    // Process all files in parallel / concurrently
+    await Promise.all(files.map(file => processFile(file)));
   };
 
   return (

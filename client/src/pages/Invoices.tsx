@@ -2035,7 +2035,7 @@ export default function Purchases() {
                       { label: "State Code", val: selectedInvoice.vendorGstin ? `${selectedInvoice.vendorGstin.slice(0, 2)} (${getStateNameFromCode(selectedInvoice.vendorGstin)})` : "—" },
                       { label: "Address", val: address || "—", isEditable: true, editValue: editAddress, setEditValue: setEditAddress },
                       { label: "Mobile", val: mobile || "—", isEditable: true, editValue: editMobile, setEditValue: setEditMobile },
-                      { label: "Phone", val: phoneStr || "—", isEditable: true, editValue: editPhone, setEditValue: setEditPhone },
+                      ...(phoneStr ? [{ label: "Phone", val: phoneStr, isEditable: true, editValue: editPhone, setEditValue: setEditPhone }] : []),
                       { label: "Email", val: email || "—", isEditable: true, editValue: editEmail, setEditValue: setEditEmail },
                     ];
 
