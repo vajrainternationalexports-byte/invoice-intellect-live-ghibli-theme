@@ -778,7 +778,37 @@ export default function Purchases() {
           body: JSON.stringify({ fileBase64: base64Content, mimeType, docTypeHint: "PURCHASE_INVOICE" }),
         });
 
-        const response = await res.json();
+        let responseText = "";
+        try {
+          responseText = await res.text();
+        } catch (readErr) {
+          throw new Error("Unable to read response from server");
+        }
+
+        if (!res.ok) {
+          let errorMsg = `Server error (status ${res.status})`;
+          try {
+            const parsedError = JSON.parse(responseText);
+            errorMsg = parsedError.error || parsedError.details || errorMsg;
+          } catch (e) {
+            if (responseText.includes("504") || responseText.includes("Gateway Timeout")) {
+              errorMsg = "Gateway Timeout (Serveo tunnel might be slow. Please try again)";
+            } else if (responseText.includes("502") || responseText.includes("Bad Gateway")) {
+              errorMsg = "Bad Gateway (Server might be restarting or unreachable)";
+            } else {
+              errorMsg = responseText.slice(0, 150) || errorMsg;
+            }
+          }
+          throw new Error(errorMsg);
+        }
+
+        let response: any;
+        try {
+          response = JSON.parse(responseText);
+        } catch (parseErr) {
+          throw new Error("Invalid response format from server (expected JSON)");
+        }
+
         if (response.success && response.data) {
           await updateStage("Stage 3: Auto-Validating Ledgers & GST...");
           

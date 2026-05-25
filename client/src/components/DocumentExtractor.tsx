@@ -38,7 +38,36 @@ export function DocumentExtractor({
         body: JSON.stringify({ fileBase64: base64String, mimeType, docTypeHint }),
       });
 
-      const response = await res.json();
+      let responseText = "";
+      try {
+        responseText = await res.text();
+      } catch (readErr) {
+        throw new Error("Unable to read response from server");
+      }
+
+      if (!res.ok) {
+        let errorMsg = `Server error (status ${res.status})`;
+        try {
+          const parsedError = JSON.parse(responseText);
+          errorMsg = parsedError.error || parsedError.details || errorMsg;
+        } catch (e) {
+          if (responseText.includes("504") || responseText.includes("Gateway Timeout")) {
+            errorMsg = "Gateway Timeout (Serveo tunnel might be slow. Please try again)";
+          } else if (responseText.includes("502") || responseText.includes("Bad Gateway")) {
+            errorMsg = "Bad Gateway (Server might be restarting or unreachable)";
+          } else {
+            errorMsg = responseText.slice(0, 150) || errorMsg;
+          }
+        }
+        throw new Error(errorMsg);
+      }
+
+      let response: any;
+      try {
+        response = JSON.parse(responseText);
+      } catch (parseErr) {
+        throw new Error("Invalid response format from server (expected JSON)");
+      }
 
       if (response.success && response.data) {
         setStatus("success");
@@ -48,24 +77,13 @@ export function DocumentExtractor({
           toast.success("Document extracted successfully");
         }, 1000);
       } else {
-        console.warn("Backend extract failed, falling back to mock");
-        const fallbackData = generateMockDataForType(docTypeHint);
-        setStatus("success");
-        setResult(fallbackData);
-        setTimeout(() => {
-          onExtract(fallbackData);
-          toast.success("Document structured via High-Speed OCR Pipeline ✓");
-        }, 1000);
+        const errorMsg = response.error || response.details || "OCR extraction failed";
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
-      console.warn("Extract error caught, falling back to mock");
-      const fallbackData = generateMockDataForType(docTypeHint);
-      setStatus("success");
-      setResult(fallbackData);
-      setTimeout(() => {
-        onExtract(fallbackData);
-        toast.success("Document structured via High-Speed OCR Pipeline ✓");
-      }, 1000);
+      console.error("Extract error:", err);
+      setStatus("error");
+      toast.error(err.message || "Failed to extract document");
     }
   };
 
@@ -78,7 +96,36 @@ export function DocumentExtractor({
         body: JSON.stringify({ url, docTypeHint }),
       });
 
-      const response = await res.json();
+      let responseText = "";
+      try {
+        responseText = await res.text();
+      } catch (readErr) {
+        throw new Error("Unable to read response from server");
+      }
+
+      if (!res.ok) {
+        let errorMsg = `Server error (status ${res.status})`;
+        try {
+          const parsedError = JSON.parse(responseText);
+          errorMsg = parsedError.error || parsedError.details || errorMsg;
+        } catch (e) {
+          if (responseText.includes("504") || responseText.includes("Gateway Timeout")) {
+            errorMsg = "Gateway Timeout (Serveo tunnel might be slow. Please try again)";
+          } else if (responseText.includes("502") || responseText.includes("Bad Gateway")) {
+            errorMsg = "Bad Gateway (Server might be restarting or unreachable)";
+          } else {
+            errorMsg = responseText.slice(0, 150) || errorMsg;
+          }
+        }
+        throw new Error(errorMsg);
+      }
+
+      let response: any;
+      try {
+        response = JSON.parse(responseText);
+      } catch (parseErr) {
+        throw new Error("Invalid response format from server (expected JSON)");
+      }
 
       if (response.success && response.data) {
         setStatus("success");
@@ -88,24 +135,13 @@ export function DocumentExtractor({
           toast.success("Web page scraped and structured successfully via Firecrawl ✓");
         }, 1000);
       } else {
-        console.warn("Scraping extract failed, falling back to mock");
-        const fallbackData = generateMockDataForType(docTypeHint);
-        setStatus("success");
-        setResult(fallbackData);
-        setTimeout(() => {
-          onExtract(fallbackData);
-          toast.success("Document structured via High-Speed OCR Pipeline ✓");
-        }, 1000);
+        const errorMsg = response.error || response.details || "Scraping failed";
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
-      console.warn("Scrape error caught, falling back to mock");
-      const fallbackData = generateMockDataForType(docTypeHint);
-      setStatus("success");
-      setResult(fallbackData);
-      setTimeout(() => {
-        onExtract(fallbackData);
-        toast.success("Document structured via High-Speed OCR Pipeline ✓");
-      }, 1000);
+      console.error("Scrape error:", err);
+      setStatus("error");
+      toast.error(err.message || "Failed to scrape web page");
     }
   };
 

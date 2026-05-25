@@ -4,30 +4,76 @@ import { QrCode, Link2, Copy, Check, Info, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export function MobileAccessHelper({ open, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
-  const [tunnelUrl, setTunnelUrl] = useState(() => {
-    return localStorage.getItem("serveo_tunnel_url") || "https://a2bad41e19e76d36-202-8-115-176.serveousercontent.com";
+  const [mode, setMode] = useState<"wifi" | "tunnel">(() => {
+    return (localStorage.getItem("mobile_access_mode") as "wifi" | "tunnel") || "wifi";
   });
+  const [localIp, setLocalIp] = useState("127.0.0.1");
+  const [port, setPort] = useState("5050");
+  const [tunnelUrl, setTunnelUrl] = useState("https://1663422ceca54b30-202-8-115-176.serveousercontent.com");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem("serveo_tunnel_url", tunnelUrl);
-  }, [tunnelUrl]);
+    localStorage.setItem("mobile_access_mode", mode);
+  }, [mode]);
 
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tunnelUrl)}`;
+  useEffect(() => {
+    const fetchServerInfo = async () => {
+      try {
+        const response = await fetch("/api/server-info");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.localIp) setLocalIp(data.localIp);
+          if (data.port) setPort(data.port);
+          if (data.tunnelUrl) setTunnelUrl(data.tunnelUrl);
+        }
+      } catch (err) {
+        console.error("Failed to fetch server info:", err);
+      }
+    };
+    fetchServerInfo();
+  }, []);
+
+  const wifiUrl = `http://${localIp}:${port}`;
+  const activeUrl = mode === "wifi" ? wifiUrl : tunnelUrl;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(activeUrl)}`;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(tunnelUrl);
+    navigator.clipboard.writeText(activeUrl);
     setCopied(true);
-    toast.success("Tunnel URL copied to clipboard");
+    toast.success(`${mode === "wifi" ? "Local network" : "Tunnel"} URL copied to clipboard`);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleOpenTunnel = () => {
-    window.open(tunnelUrl, "_blank");
+    window.open(activeUrl, "_blank");
   };
 
   const renderContent = () => (
     <div className="space-y-4 text-center">
+      {/* Tab Switcher */}
+      <div className="flex bg-blue-light border border-blue-mid/10 p-0.5 rounded-xl">
+        <button
+          onClick={() => setMode("wifi")}
+          className={`flex-1 text-[8px] font-black uppercase tracking-wider py-1.5 rounded-lg transition-all ${
+            mode === "wifi"
+              ? "bg-white text-blue-ink shadow-sm"
+              : "text-blue-mid hover:text-blue-ink"
+          }`}
+        >
+          Local Wi-Fi
+        </button>
+        <button
+          onClick={() => setMode("tunnel")}
+          className={`flex-1 text-[8px] font-black uppercase tracking-wider py-1.5 rounded-lg transition-all ${
+            mode === "tunnel"
+              ? "bg-white text-blue-ink shadow-sm"
+              : "text-blue-mid hover:text-blue-ink"
+          }`}
+        >
+          Public Tunnel
+        </button>
+      </div>
+
       <div className="bg-blue-light/50 p-3 rounded-2xl border border-blue-mid/10 flex flex-col items-center gap-2">
         <div className="bg-white p-2 rounded-xl border border-blue-mid/15 shadow-sm">
           <img 
@@ -38,22 +84,27 @@ export function MobileAccessHelper({ open, onOpenChange }: { open?: boolean; onO
           />
         </div>
         <p className="text-[9px] text-blue-mid font-bold uppercase tracking-widest">
-          Scan with your mobile camera
+          {mode === "wifi" ? "Scan to connect on local Wi-Fi" : "Scan to connect via public tunnel"}
         </p>
       </div>
 
       <div className="space-y-1.5 text-left">
         <label className="text-[9px] font-black text-blue-ink uppercase tracking-widest pl-1">
-          Public Tunnel URL (Serveo / Ngrok)
+          {mode === "wifi" ? "Direct Wi-Fi URL (Same Network)" : "Public Tunnel URL"}
         </label>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <input
               type="text"
-              value={tunnelUrl}
-              onChange={(e) => setTunnelUrl(e.target.value)}
-              placeholder="https://your-tunnel.serveousercontent.com"
-              className="w-full text-[10px] font-semibold px-3 py-2 bg-blue-light border border-blue-mid/15 rounded-xl outline-none focus:border-blue-mid/40 pr-8 text-blue-ink"
+              value={activeUrl}
+              readOnly={mode === "wifi"}
+              onChange={(e) => {
+                if (mode === "tunnel") setTunnelUrl(e.target.value);
+              }}
+              placeholder={mode === "wifi" ? wifiUrl : "https://your-tunnel.serveousercontent.com"}
+              className={`w-full text-[10px] font-semibold px-3 py-2 bg-blue-light border border-blue-mid/15 rounded-xl outline-none focus:border-blue-mid/40 pr-8 text-blue-ink ${
+                mode === "wifi" ? "opacity-80 cursor-default" : ""
+              }`}
             />
             <Link2 className="absolute right-3 top-2.5 text-blue-mid/45" size={12} />
           </div>
@@ -72,12 +123,17 @@ export function MobileAccessHelper({ open, onOpenChange }: { open?: boolean; onO
           <div className="space-y-1">
             <h4 className="text-[9px] font-black text-blue-ink uppercase tracking-wider">How to connect:</h4>
             <div className="text-[8px] text-blue-mid/80 font-bold leading-normal uppercase space-y-1">
-              <p>1. Start your local server (`npm run dev`)</p>
-              <p>2. Run in terminal to establish tunnel:</p>
-              <code className="block font-mono bg-blue-mid/10 p-1.5 rounded text-[8px] text-blue-deep select-all break-all lowercase font-normal">
-                ssh -R 80:localhost:5050 serveo.net
-              </code>
-              <p>3. Copy the URL from the terminal output and paste it above!</p>
+              {mode === "wifi" ? (
+                <>
+                  <p>1. Make sure your phone is on the SAME Wi-Fi network.</p>
+                  <p>2. Scan the QR code or go to the direct URL: <span className="lowercase font-mono text-blue-deep">{wifiUrl}</span></p>
+                </>
+              ) : (
+                <>
+                  <p>1. Start tunnel in terminal: <code className="block font-mono bg-blue-mid/10 p-1 rounded text-[7px] text-blue-deep select-all lowercase font-normal mt-1">ssh -R 80:localhost:5050 serveo.net</code></p>
+                  <p>2. Enter tunnel URL above and scan the QR code.</p>
+                </>
+              )}
             </div>
           </div>
         </div>
