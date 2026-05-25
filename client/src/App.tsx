@@ -14,13 +14,13 @@ import { AppShell } from "@/components/layout/AppShell";
 
 // Pages
 import Dashboard        from "@/pages/Dashboard";
-import Invoices         from "@/pages/Invoices";
+import Invoices         from "@/pages/purchase/Invoices";
 import Reconciliation   from "@/pages/Reconciliation";
 import Vendors          from "@/pages/Vendors";
-import Sales            from "@/pages/Sales";
-import JobWork          from "@/pages/JobWork";
-import JobWorkDashboard from "@/pages/JobWorkDashboard";
-import PurchaseOrder    from "@/pages/PurchaseOrder";
+import Sales            from "@/pages/sales/Sales";
+import JobWork          from "@/pages/jobwork/labour/JobWork";
+import JobWorkDashboard from "@/pages/jobwork/zinc/JobWorkDashboard";
+import PurchaseOrder    from "@/pages/po/PurchaseOrder";
 
 // Error Boundary
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
