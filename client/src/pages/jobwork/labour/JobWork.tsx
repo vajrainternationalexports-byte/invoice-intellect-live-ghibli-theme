@@ -12,6 +12,7 @@ import { downloadExcel } from "@/lib/excel-export";
 import { useLocalFilter } from "@/hooks/useLocalFilter";
 import { formatINR, formatThousands, zincBalanceLabel, toFloat } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import { AIVoiceAgent } from "@/components/AIVoiceAgent";
 
 type MainTab = "incoming" | "labour";
 type SubTab  = "vendors"  | "challans";
@@ -195,10 +196,23 @@ export default function JobWork() {
 
             {/* Search (challans only) */}
             {subTab === "challans" && (
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
-                <input className="search-input" placeholder="Search challan, vendor..."
-                  value={challanFilter.search} onChange={e => challanFilter.setSearch(e.target.value)} />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
+                  <input className="search-input" placeholder="Search challan, vendor..."
+                    value={challanFilter.search} onChange={e => challanFilter.setSearch(e.target.value)} />
+                </div>
+                <AIVoiceAgent 
+                  contextMode="global"
+                  onAction={(action) => {
+                    if (action.intent === "SEARCH_INVOICES" && action.searchQuery) {
+                      challanFilter.setSearch(action.searchQuery);
+                      toast.success(`AI Search Filter Applied: ${action.searchQuery}`);
+                    } else if (action.message) {
+                      toast.info(action.message);
+                    }
+                  }}
+                />
               </div>
             )}
 
@@ -302,10 +316,23 @@ export default function JobWork() {
             </div>
 
             {/* Labour search */}
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
-              <input className="search-input" placeholder="Search vendor, invoice #..."
-                value={labourFilter.search} onChange={e => labourFilter.setSearch(e.target.value)} />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
+                <input className="search-input" placeholder="Search vendor, invoice #..."
+                  value={labourFilter.search} onChange={e => labourFilter.setSearch(e.target.value)} />
+              </div>
+              <AIVoiceAgent 
+                contextMode="global"
+                onAction={(action) => {
+                  if (action.intent === "SEARCH_INVOICES" && action.searchQuery) {
+                    labourFilter.setSearch(action.searchQuery);
+                    toast.success(`AI Search Filter Applied: ${action.searchQuery}`);
+                  } else if (action.message) {
+                    toast.info(action.message);
+                  }
+                }}
+              />
             </div>
 
             {/* Labour list */}

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, Loader2, Send, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,63 +18,314 @@ interface AIVoiceAgentProps {
   className?: string;
 }
 
+const WORKER_CODE = `
+let tokenizer = null;
+let processor = null;
+let model = null;
+let modelName = "onnx-community/whisper-tiny-ONNX";
+let isReady = false;
+
+async function init() {
+  try {
+    self.postMessage({ status: "loading", data: "Importing Transformers library..." });
+    const { AutoTokenizer, AutoProcessor, WhisperForConditionalGeneration, env } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.0");
+    env.allowLocalModels = false;
+    env.backends.onnx.logLevel = "info";
+
+    self.postMessage({ status: "loading", data: "Loading tokenizer..." });
+    tokenizer = await AutoTokenizer.from_pretrained(modelName);
+    
+    self.postMessage({ status: "loading", data: "Loading processor..." });
+    processor = await AutoProcessor.from_pretrained(modelName);
+
+    self.postMessage({ status: "loading", data: "Loading Whisper model (WebGPU)..." });
+    model = await WhisperForConditionalGeneration.from_pretrained(modelName, {
+      dtype: {
+        encoder_model: "fp32",
+        decoder_model_merged: "q4"
+      },
+      device: "webgpu"
+    });
+
+    isReady = true;
+    self.postMessage({ status: "ready" });
+  } catch (err) {
+    try {
+      self.postMessage({ status: "loading", data: "WebGPU failed. Falling back to CPU/WASM..." });
+      const { AutoTokenizer, AutoProcessor, WhisperForConditionalGeneration, env } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.0");
+      env.allowLocalModels = false;
+      tokenizer = await AutoTokenizer.from_pretrained(modelName);
+      processor = await AutoProcessor.from_pretrained(modelName);
+      model = await WhisperForConditionalGeneration.from_pretrained(modelName, {
+        dtype: {
+          encoder_model: "fp32",
+          decoder_model_merged: "q4"
+        },
+        device: "wasm"
+      });
+      isReady = true;
+      self.postMessage({ status: "ready" });
+    } catch (cpuErr) {
+      self.postMessage({ status: "error", data: "Initialization failed: " + cpuErr.message });
+    }
+  }
+}
+
+self.addEventListener("message", async (e) => {
+  const { type, data } = e.data || {};
+  if (type === "load") {
+    await init();
+  } else if (type === "generate") {
+    if (!isReady) {
+      self.postMessage({ status: "error", data: "Model not ready." });
+      return;
+    }
+    try {
+      self.postMessage({ status: "transcribing_start" });
+      const { audio, language } = data;
+      const processedAudio = await processor(audio);
+      
+      const output = await model.generate({
+        ...processedAudio,
+        language: language === "auto" ? null : language,
+      });
+
+      const decoded = tokenizer.batch_decode(output, { skip_special_tokens: true });
+      self.postMessage({ status: "complete", output: decoded[0] || "" });
+    } catch (err) {
+      self.postMessage({ status: "error", data: "Transcription failed: " + err.message });
+    }
+  }
+});
+`;
+
 export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "" }: AIVoiceAgentProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const [modelStatus, setModelStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [modelProgress, setModelProgress] = useState("");
   const [transcriptText, setTranscriptText] = useState("");
   const [manualText, setManualText] = useState("");
-  const recognitionRef = useRef<any>(null);
 
-  const startListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setSpeechSupported(false);
+  const workerRef = useRef<Worker | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<any>(null); // Browser native SpeechRecognition fallback
+
+  // Resample audio to 16kHz mono Float32
+  const processAudioBlob = async (blob: Blob): Promise<Float32Array> => {
+    const arrayBuffer = await blob.arrayBuffer();
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AudioContextClass();
+    const decoded = await ctx.decodeAudioData(arrayBuffer);
+    
+    const numChannels = decoded.numberOfChannels;
+    const inSr = decoded.sampleRate;
+    const length = decoded.length;
+    
+    // Merge channels to mono
+    const tmp = new Float32Array(length);
+    for (let ch = 0; ch < numChannels; ch++) {
+      const channelData = decoded.getChannelData(ch);
+      if (ch === 0) {
+        tmp.set(channelData);
+      } else {
+        for (let i = 0; i < length; i++) {
+          tmp[i] += channelData[i];
+        }
+      }
+    }
+    
+    if (numChannels > 1) {
+      for (let i = 0; i < length; i++) {
+        tmp[i] /= numChannels;
+      }
+    }
+    
+    // Resample to 16kHz
+    const targetSr = 16000;
+    if (inSr === targetSr) {
+      await ctx.close();
+      return tmp;
+    }
+    
+    const ratio = inSr / targetSr;
+    const outLen = Math.round(length / ratio);
+    const out = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const idx = i * ratio;
+      const i0 = Math.floor(idx);
+      const i1 = Math.min(i0 + 1, length - 1);
+      const frac = idx - i0;
+      out[i] = tmp[i0] * (1 - frac) + tmp[i1] * frac;
+    }
+    await ctx.close();
+    return out;
+  };
+
+  const cleanTranscript = (text: string): string => {
+    let cleaned = text.trim();
+    // VOXpilot Filler Word Removal
+    const fillers = ["um", "uh", "hmm", "like", "you know", "ah", "uhm"];
+    for (const filler of fillers) {
+      const regex = new RegExp(`\\b${filler}\\b`, "gi");
+      cleaned = cleaned.replace(regex, "");
+    }
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+    if (cleaned.length > 0) {
+      // VOXpilot Auto-Capitalization
+      cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+  };
+
+  // Initialize Whisper Web Worker
+  const initWhisperWorker = () => {
+    if (workerRef.current) return;
+    
+    try {
+      setModelStatus("loading");
+      setModelProgress("Spawning worker...");
+      
+      const blob = new Blob([WORKER_CODE], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+      const worker = new Worker(url, { type: "module" });
+      URL.revokeObjectURL(url);
+      
+      worker.onmessage = (e) => {
+        const { status, data, output } = e.data || {};
+        if (status === "loading") {
+          setModelProgress(data || "Loading model...");
+        } else if (status === "ready") {
+          setModelStatus("ready");
+          setModelProgress("");
+        } else if (status === "transcribing_start") {
+          setIsProcessing(true);
+        } else if (status === "complete") {
+          setIsProcessing(false);
+          const cleaned = cleanTranscript(output || "");
+          setTranscriptText(cleaned);
+          if (cleaned) {
+            processCommand(cleaned);
+          }
+        } else if (status === "error") {
+          setModelStatus("error");
+          setModelProgress(data || "ASR worker error");
+          toast.error("Local Whisper initialization failed, using browser native fallback.");
+        }
+      };
+      
+      worker.onerror = () => {
+        setModelStatus("error");
+        toast.error("Local Whisper failed, using browser native fallback.");
+      };
+      
+      worker.postMessage({ type: "load" });
+      workerRef.current = worker;
+    } catch (err) {
+      setModelStatus("error");
+    }
+  };
+
+  // Start recording audio
+  const startListening = async () => {
+    // If local Whisper is not supported/failed, use native browser SpeechRecognition fallback
+    if (modelStatus === "error" || modelStatus === "idle") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        toast.error("Speech recognition is not supported in this browser.");
+        return;
+      }
+      
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+      
+      recognition.onstart = () => {
+        setIsListening(true);
+        setTranscriptText("");
+      };
+      
+      recognition.onresult = async (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setIsListening(false);
+        const processed = cleanTranscript(transcript);
+        setTranscriptText(processed);
+        if (processed) {
+          await processCommand(processed);
+        }
+      };
+      
+      recognition.onerror = (event: any) => {
+        setIsListening(false);
+        if (event.error === "not-allowed") {
+          toast.error("Microphone permission denied. Please type your command.");
+        } else {
+          toast.error("Could not hear you. Please try again or type below.");
+        }
+      };
+      
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+      
+      recognitionRef.current = recognition;
+      recognition.start();
       return;
     }
-    setSpeechSupported(true);
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-
-    recognition.onstart = () => {
+    // Use Local Whisper via MediaRecorder
+    try {
       setIsListening(true);
       setTranscriptText("");
-    };
+      audioChunksRef.current = [];
 
-    recognition.onresult = async (event: any) => {
-      const transcript = event.results[0][0].transcript;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        setIsListening(false);
+        if (audioChunksRef.current.length === 0) return;
+        
+        try {
+          const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
+          const float32Audio = await processAudioBlob(blob);
+          if (workerRef.current) {
+            workerRef.current.postMessage({
+              type: "generate",
+              data: { audio: float32Audio, language: "en" }
+            });
+          }
+        } catch (e: any) {
+          console.error("Audio processing failed", e);
+          toast.error("Audio processing failed: " + e.message);
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+    } catch (err: any) {
       setIsListening(false);
-      if (transcript) {
-        setTranscriptText(transcript);
-        await processCommand(transcript);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      setIsListening(false);
-      if (event.error === "not-allowed") {
-        toast.error("Microphone permission denied. Please type your command.");
-      } else {
-        toast.error("Could not hear you. Please try again or type below.");
-      }
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+      toast.error("Failed to access microphone: " + err.message);
+    }
   };
 
   const stopListening = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
+      setIsListening(false);
+    } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      // Stop all tracks to release microphone
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsListening(false);
     }
   };
@@ -108,9 +359,11 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (open) {
+      // Lazy load local Whisper model when modal is opened
+      initWhisperWorker();
       setTimeout(() => {
         startListening();
-      }, 300);
+      }, 500);
     } else {
       stopListening();
       setTranscriptText("");
@@ -121,11 +374,19 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualText.trim()) return;
-    const cmd = manualText.trim();
+    const cmd = cleanTranscript(manualText.trim());
     setTranscriptText(cmd);
     setManualText("");
     await processCommand(cmd);
   };
+
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
+    };
+  }, []);
 
   const globalSuggestions = [
     "Find invoices from Super Smelters",
@@ -168,6 +429,14 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
         </DialogHeader>
 
         <div className="flex flex-col items-center justify-center py-6 space-y-4">
+          {/* Status info */}
+          {modelStatus === "loading" && (
+            <div className="text-center bg-blue-light/50 border border-blue-mid/10 rounded-xl px-4 py-2 w-full">
+              <Loader2 className="animate-spin text-blue-mid h-4 w-4 mx-auto mb-1" />
+              <p className="text-[10px] font-bold text-blue-deep uppercase tracking-wider">{modelProgress}</p>
+            </div>
+          )}
+
           {/* Pulsing Visualizer */}
           <div className="relative flex items-center justify-center">
             <AnimatePresence>
@@ -193,7 +462,7 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
 
             <button
               onClick={isListening ? stopListening : startListening}
-              disabled={isProcessing}
+              disabled={isProcessing || modelStatus === "loading"}
               className={`h-20 w-20 rounded-full flex items-center justify-center border-2 shadow-lg transition-all cursor-pointer ${
                 isListening 
                   ? "bg-red-500 border-red-400 text-white shadow-red-500/20" 
@@ -218,8 +487,8 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
                 ? "AI is thinking..." 
                 : isListening 
                   ? "Listening... Speak your request" 
-                  : !speechSupported
-                    ? "Voice not supported in this browser"
+                  : modelStatus === "loading"
+                    ? "Downloading local Whisper ASR model..."
                     : "Microphone Idle"}
             </p>
             {transcriptText && (
@@ -243,7 +512,7 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
                   setTranscriptText(s);
                   processCommand(s);
                 }}
-                disabled={isProcessing}
+                disabled={isProcessing || modelStatus === "loading"}
                 className="text-left text-[11px] font-semibold text-blue-deep bg-blue-light/50 border border-blue-mid/5 rounded-xl px-3 py-2 hover:bg-blue-light hover:border-blue-mid/15 transition-all cursor-pointer"
               >
                 {s}
@@ -259,11 +528,7 @@ export function AIVoiceAgent({ contextMode, invoiceData, onAction, className = "
             value={manualText}
             onChange={(e) => setManualText(e.target.value)}
             disabled={isProcessing}
-            placeholder={
-              !speechSupported 
-                ? "Type your request here..." 
-                : "Or type your request here..."
-            }
+            placeholder="Type your request here..."
             className="flex-1 px-4 py-2.5 bg-blue-light/30 border border-blue-mid/10 rounded-2xl text-xs font-semibold text-blue-ink focus:outline-none focus:border-blue-mid transition-all"
           />
           <button 

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { AIVoiceAgent } from "@/components/AIVoiceAgent";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { downloadExcel } from "@/lib/excel-export";
 import { useLocalFilter } from "@/hooks/useLocalFilter";
@@ -329,10 +330,23 @@ export default function PurchaseOrder() {
       </header>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
-        <input className="search-input" placeholder="Search PO number, buyer..."
-          value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-mid/40" size={16} />
+          <input className="search-input" placeholder="Search PO number, buyer..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <AIVoiceAgent 
+          contextMode="global"
+          onAction={(action) => {
+            if (action.intent === "SEARCH_INVOICES" && action.searchQuery) {
+              setSearch(action.searchQuery);
+              toast.success(`AI Search Filter Applied: ${action.searchQuery}`);
+            } else if (action.message) {
+              toast.info(action.message);
+            }
+          }}
+        />
       </div>
 
       {/* Tabs */}

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
 import { DocumentExtractor } from "@/components/DocumentExtractor";
+import { AIVoiceAgent } from "@/components/AIVoiceAgent";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import { downloadExcel } from "@/lib/excel-export";
 import { formatINR, formatDate } from "@/lib/formatters";
@@ -829,6 +830,17 @@ export default function Sales() {
               </button>
             )}
           </div>
+          <AIVoiceAgent 
+            contextMode="global"
+            onAction={(action) => {
+              if (action.intent === "SEARCH_INVOICES" && action.searchQuery) {
+                setSearch(action.searchQuery);
+                toast.success(`AI Search Filter Applied: ${action.searchQuery}`);
+              } else if (action.message) {
+                toast.info(action.message);
+              }
+            }}
+          />
           <motion.button 
             whileTap={{ scale: 0.9 }} 
             onClick={() => setShowFilters(!showFilters)} 
@@ -1472,15 +1484,67 @@ export default function Sales() {
             <div className="p-6 space-y-5 overflow-y-auto no-scrollbar pb-10">
               <DrawerHeader className="p-0 text-left">
                 <div className="flex justify-between items-start mb-4">
-                  <button 
-                    onClick={() => {
-                      setShowDocPreview(true);
-                    }}
-                    className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10 shadow-sm hover:bg-blue-light hover:text-blue-ink hover:scale-105 active:scale-95 transition-all focus:outline-none animate-pulse-glow"
-                    title="View Original Scanned Document"
-                  >
-                    <Eye size={24} />
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setShowDocPreview(true);
+                      }}
+                      className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-mid border border-blue-mid/10 shadow-sm hover:bg-blue-light hover:text-blue-ink hover:scale-105 active:scale-95 transition-all focus:outline-none animate-pulse-glow"
+                      title="View Original Scanned Document"
+                    >
+                      <Eye size={24} />
+                    </button>
+                    <AIVoiceAgent 
+                      contextMode="invoice"
+                      invoiceData={selectedInvoice}
+                      className="h-12 w-12 rounded-2xl"
+                      onAction={(action) => {
+                        if (action.intent === "EDIT_INVOICE" && action.edits) {
+                          const { lineItemIndex, rate, quantity } = action.edits;
+                          const msg = action.message || `AI wants to update line item ${lineItemIndex + 1}. Rate: ${rate}, Quantity: ${quantity}. Confirm to recalculate?`;
+                          if (window.confirm(msg)) {
+                            const currentItems = Array.isArray(selectedInvoice.lineItems) ? [...selectedInvoice.lineItems] : [];
+                            if (currentItems[lineItemIndex]) {
+                              const item = { ...currentItems[lineItemIndex] };
+                              const newRate = rate !== null ? rate : parseFloat(item.price_per_unit || item.pricePerUnit || item.rate || "0");
+                              const newQty = quantity !== null ? quantity : parseFloat(item.quantity || item.qty || "0");
+                              const newTotal = newRate * newQty;
+                              
+                              item.price_per_unit = String(newRate);
+                              item.pricePerUnit = String(newRate);
+                              item.quantity = String(newQty);
+                              item.qty = String(newQty);
+                              item.taxable_amount = String(newTotal);
+                              item.taxableAmount = String(newTotal);
+                              
+                              // Recalculate taxes
+                              item.cgst_amount = String((parseFloat(item.cgst_rate || item.cgstRate || "0") / 100) * newTotal);
+                              item.cgstAmount = item.cgst_amount;
+                              item.sgst_amount = String((parseFloat(item.sgst_rate || item.sgstRate || "0") / 100) * newTotal);
+                              item.sgstAmount = item.sgst_amount;
+                              item.igst_amount = String((parseFloat(item.igst_rate || item.igstRate || "0") / 100) * newTotal);
+                              item.igstAmount = item.igst_amount;
+                              item.total_amount = String(newTotal + parseFloat(item.cgst_amount) + parseFloat(item.sgst_amount) + parseFloat(item.igst_amount));
+                              item.total = item.total_amount;
+                              item.totalAmount = item.total_amount;
+                              
+                              currentItems[lineItemIndex] = item;
+                              
+                              setEditTaxableAmount(String(currentItems.reduce((sum, x) => sum + parseFloat(x.taxable_amount || x.taxableAmount || "0"), 0)));
+                              setEditTotalGst(String(currentItems.reduce((sum, x) => sum + parseFloat(x.cgst_amount || "0") + parseFloat(x.sgst_amount || "0") + parseFloat(x.igst_amount || "0"), 0)));
+                              setEditInvoiceTotal(String(currentItems.reduce((sum, x) => sum + parseFloat(x.total_amount || x.total || "0"), 0)));
+                              
+                              selectedInvoice.lineItems = currentItems;
+                              setSelectedInvoice({ ...selectedInvoice });
+                              toast.success("Line item updated via AI Voice!");
+                            }
+                          }
+                        } else if (action.message) {
+                          toast.info(action.message);
+                        }
+                      }}
+                    />
+                  </div>
                   <div className="flex gap-2 items-center">
                     {selectedInvoice.status !== "processed" && (
                       <button
